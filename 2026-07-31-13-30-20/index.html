@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>码间随笔 · 技术博客</title>
+  <meta name="description" content="一个专注编程与技术随笔的个人博客，支持 Markdown 渲染、标签分类与代码高亮。" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#/" data-link>
+        <span class="brand-mark">&lt;/&gt;</span>
+        <span class="brand-name">码间随笔</span>
+      </a>
+      <nav class="site-nav" id="siteNav">
+        <a href="#/" data-link data-route="home">首页</a>
+        <a href="#/tags" data-link data-route="tags">标签</a>
+        <a href="#/about" data-link data-route="about">关于</a>
+      </nav>
+      <button class="nav-toggle" id="navToggle" aria-label="菜单">☰</button>
+    </div>
+  </header>
+
+  <main class="container" id="app"><!-- 内容由 app.js 动态渲染 --></main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>© <span id="year"></span> 码间随笔 · 用代码记录思考</p>
+      <p class="footer-sub">基于纯静态 HTML / CSS / JS 构建，Markdown 由 marked.js 渲染。</p>
+    </div>
+  </footer>
+
+  <!-- Markdown 解析与代码高亮（CDN，需要联网首次加载） -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
