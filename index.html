@@ -46,17 +46,23 @@
     default-minimized="false"
     storage-key="lotusor-blog"></nmp-player>
 
-  <!-- 内联搜索栏（固定在左下角，与播放器相互独立） -->
+  <!-- 音乐搜索：🔍 角标（附着播放器右上角）+ 顶部弹出抽屉面板 -->
   <div class="music-dock" id="musicSearch">
-    <div class="ms-inline" id="msInline">
-      <div class="ms-inline-input-wrap">
-        <svg class="ms-search-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
-        <input class="ms-input" id="msInput" type="search" placeholder="搜歌曲" autocomplete="off" aria-label="搜索歌曲" />
-        <button class="ms-close" id="msClose" type="button" aria-label="关闭搜索" hidden>✕</button>
+    <!-- 搜索面板：从播放器顶部弹出的玻璃抽屉 -->
+    <div class="ms-panel" id="msPanel" hidden>
+      <div class="ms-input-row">
+        <svg class="ms-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+        <input class="ms-input" id="msInput" type="search" placeholder="搜索歌曲 / 歌手…" autocomplete="off" aria-label="搜索歌曲" />
+        <button class="ms-close" id="msClose" type="button" aria-label="关闭搜索">✕</button>
       </div>
       <ul class="ms-results" id="msResults" hidden></ul>
       <div class="ms-status" id="msStatus"></div>
     </div>
+
+    <!-- 搜索入口：🔍 角标，附着于播放器右上角 -->
+    <button class="ms-toggle" id="msToggle" type="button" aria-label="搜索歌曲" title="搜索歌曲">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+    </button>
   </div>
 
   <!-- Markdown 解析与代码高亮（CDN） -->
