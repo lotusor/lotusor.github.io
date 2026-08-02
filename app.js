@@ -528,3 +528,99 @@ if (document.readyState !== "loading") router();
   // 首屏渲染后稍作停顿再淡出（切入动画）
   setTimeout(hide, 1100);
 })();
+
+/* ---------------------- 音乐搜索（在线搜歌 → 写入 NMP 播放器 song-id） ---------------------- */
+(function () {
+  const search  = document.getElementById("musicSearch");
+  const toggle  = document.getElementById("msToggle");
+  const panel   = document.getElementById("msPanel");
+  const input   = document.getElementById("msInput");
+  const results = document.getElementById("msResults");
+  const status  = document.getElementById("msStatus");
+  const closeBtn = document.getElementById("msClose");
+  if (!search || !toggle || !panel || !input || !results) return;
+
+  const API = "https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php";
+  let debounce, player = null, reqId = 0;
+
+  const getPlayer = () => (player ||= document.querySelector("nmp-player"));
+  const esc = (s) => String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDur = (ms) => {
+    const s = Math.round((ms || 0) / 1000);
+    if (!s) return "";
+    return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  };
+
+  const openPanel = () => { panel.hidden = false; setTimeout(() => input.focus(), 30); };
+  const closePanel = () => {
+    panel.hidden = true;
+    input.value = ""; results.innerHTML = ""; status.textContent = "";
+  };
+
+  toggle.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
+  closeBtn.addEventListener("click", closePanel);
+  document.addEventListener("click", (e) => { if (!panel.hidden && !search.contains(e.target)) closePanel(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) closePanel(); });
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    const q = input.value.trim();
+    if (!q) { results.innerHTML = ""; status.textContent = ""; return; }
+    status.textContent = "搜索中…";
+    const my = ++reqId;
+    debounce = setTimeout(() => doSearch(q, my), 350);
+  });
+
+  async function doSearch(q, my) {
+    try {
+      const res = await fetch(`${API}/search?keywords=${encodeURIComponent(q)}&limit=15`);
+      const data = await res.json();
+      if (my !== reqId) return; // 已有更新的请求，丢弃旧结果
+      const songs = (data.result && data.result.songs) || [];
+      if (!songs.length) { results.innerHTML = ""; status.textContent = "没有找到相关歌曲"; return; }
+
+      // 批量取封面（一次请求），失败不影响播放
+      const ids = songs.map(s => s.id).join(",");
+      const coverMap = {};
+      try {
+        const d2 = await (await fetch(`${API}/song/detail?ids=${ids}`)).json();
+        (d2.songs || []).forEach(s => { if (s.id != null && s.al && s.al.picUrl) coverMap[s.id] = s.al.picUrl; });
+      } catch (_) {}
+
+      results.innerHTML = songs.map(s => {
+        const arts = (s.artists || s.ar || []).map(a => a.name).join("/") || "未知歌手";
+        const cover = coverMap[s.id] || "";
+        const dur = fmtDur(s.duration || s.dt);
+        return `<li class="ms-result" data-id="${s.id}">
+          <span class="ms-cover" ${cover ? `style="background-image:url('${cover}')"` : ""}>♪</span>
+          <span class="ms-meta">
+            <span class="ms-name">${esc(s.name)}</span>
+            <span class="ms-artist">${esc(arts)}</span>
+          </span>
+          <span class="ms-dur">${dur}</span>
+        </li>`;
+      }).join("");
+      status.textContent = "";
+    } catch (err) {
+      if (my !== reqId) return;
+      results.innerHTML = ""; status.textContent = "搜索失败，请稍后重试";
+    }
+  }
+
+  // 点结果：把 song-id 写回 NMP 播放器，它监听到后会重新加载并播放该歌曲
+  function tryPlay(p, times) {
+    if (!times) return;
+    setTimeout(() => { try { p.play && p.play(); } catch (_) {}; tryPlay(p, times - 1); }, 900);
+  }
+  results.addEventListener("click", (e) => {
+    const li = e.target.closest(".ms-result");
+    if (!li) return;
+    const p = getPlayer();
+    if (p) {
+      p.setAttribute("song-id", li.dataset.id);
+      tryPlay(p, 3); // 等歌曲加载完成后尝试自动播放（多次兜底 API 延迟）
+    }
+    closePanel();
+  });
+})();

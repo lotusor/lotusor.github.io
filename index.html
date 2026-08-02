@@ -46,10 +46,26 @@
     default-minimized="false"
     storage-key="lotusor-blog"></nmp-player>
 
+  <!-- 音乐搜索：调用网易云公共 API，点结果写入 NMP 播放器 song-id 实现在线播放 -->
+  <div class="music-search" id="musicSearch">
+    <div class="ms-panel glass" id="msPanel" hidden>
+      <div class="ms-input-row">
+        <svg class="ms-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+        <input class="ms-input" id="msInput" type="search" placeholder="搜索歌曲 / 歌手…" autocomplete="off" aria-label="搜索歌曲" />
+        <button class="ms-close" id="msClose" type="button" aria-label="关闭搜索">✕</button>
+      </div>
+      <ul class="ms-results" id="msResults"></ul>
+      <div class="ms-status" id="msStatus"></div>
+    </div>
+    <button class="ms-toggle glass" id="msToggle" type="button" aria-label="搜索歌曲" title="搜索歌曲">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+    </button>
+  </div>
+
   <!-- Markdown 解析与代码高亮（CDN） -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
-  <script src="app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/netease-mini-player-v3@3.0.1/dist/nmpv3.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
