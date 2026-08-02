@@ -1,5 +1,5 @@
 /* =========================================================
-   码间随笔 — 纯静态个人博客
+   lotusor — 纯静态个人博客（雨霁的blog · 隙里碎笔）
    路由 + Markdown 渲染（marked.js）+ 代码高亮（highlight.js）
    文章数据在 POSTS 数组中，新增文章只需往里加对象即可。
    ========================================================= */
@@ -257,16 +257,82 @@ function highlightWithin(root) {
 }
 
 /* ---------------------- 视图 ---------------------- */
-function viewHome() {
+/* ---------------------- 社交链接（封面用） ---------------------- */
+const SOCIALS = [
+  { name: "Bilibili", url: "https://space.bilibili.com/1806826320?spm_id_from=333.1007.0.0", icon: "https://www.bilibili.com/favicon.ico" },
+  { name: "牛客",     url: "https://www.nowcoder.com/users/130982921",                          icon: "https://www.nowcoder.com/favicon.ico" },
+  { name: "GitHub",   url: "https://github.com/lotusor?tab=stars",                             icon: "https://github.com/favicon.ico" }
+];
+
+/* ---------------------- 友站推荐 ---------------------- */
+const FRIENDS = [
+  { name: "emoera", url: "https://emoera.com", icon: "https://emoera.com/favicon.ico" }
+];
+
+function friendLink(f) {
+  return `
+    <a class="friend-card glass" href="${f.url}" target="_blank" rel="noopener" title="${f.name}" aria-label="友站：${f.name}">
+      <img src="${f.icon}" alt="${f.name}" loading="lazy"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" />
+      <span class="friend-fallback">${f.name.charAt(0).toUpperCase()}</span>
+      <span>${f.name}</span>
+    </a>`;
+}
+
+function socialLink(s) {
+  return `
+    <a class="social glass" href="${s.url}" target="_blank" rel="noopener" title="${s.name}" aria-label="${s.name}">
+      <img src="${s.icon}" alt="${s.name}" loading="lazy"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" />
+      <span class="social-fallback">${s.name.charAt(0)}</span>
+    </a>`;
+}
+
+/* ---------------------- 封面（首页） ---------------------- */
+function viewLanding() {
+  document.body.classList.remove("on-blog");
+  const socials = SOCIALS.map(socialLink).join("");
+  $app.innerHTML = `
+    <div class="cover-grid" aria-hidden="true"></div>
+    <section class="cover">
+      <div class="cover-avatar">
+        <img src="assets/avatar.jpg" alt="lotusor" />
+      </div>
+      <p class="cover-quote">“所有的命运都已写就，<br>所有的泪水都将启程”</p>
+      <div class="cover-socials">
+        ${socials}
+        <div class="qq-wrap">
+          <div class="qq-icon-btn glass" title="QQ 二维码" aria-label="QQ 二维码">
+            <img src="https://im.qq.com/favicon.ico" alt="QQ" loading="lazy"
+                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%238899bb%22><text y=%2218%22 font-size=%2216%22>Q</text></svg>'" />
+          </div>
+          <div class="qq-qr-panel">
+            <img src="assets/qq-qr.png" alt="QQ 二维码" />
+          </div>
+        </div>
+      </div>
+      <a class="my-think glass" href="#/blog">MY-THINK →</a>
+      <div class="friend-sites">
+        <p class="friend-sites-title">友站推荐</p>
+        <div class="friend-sites-list">
+          ${FRIENDS.map(friendLink).join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+/* ---------------------- 文章列表（MY-THINK 进入） ---------------------- */
+function viewBlog() {
   const posts = [...POSTS].sort(byDateDesc);
   const tags = allTags().slice(0, 8);
   const cards = posts.map(postCard).join("");
   $app.innerHTML = `
-    <section class="hero">
-      <h1>码间随笔</h1>
-      <p>一个专注编程与技术随笔的地方。这里记录我用代码理解世界的过程——有些是踩坑，有些是顿悟。</p>
+    <section class="blog-head">
+      <a class="back-link" href="#/">← 返回封面</a>
+      <h1 class="blog-title">文章</h1>
+      <p class="blog-sub">记录用代码理解世界的过程——有些是踩坑，有些是顿悟。</p>
     </section>
-    <h2 class="section-title">最新文章 <span class="count">${posts.length} 篇</span></h2>
     <div class="post-list">${cards}</div>
     ${tags.length ? `<h2 class="section-title" style="margin-top:34px">热门标签</h2>
       <div class="tag-row">${tags.map(([t]) => tagLink(t)).join("")}</div>` : ""}
@@ -373,40 +439,92 @@ function viewNotFound() {
 }
 
 /* ---------------------- 路由 ---------------------- */
+let _prevRoute = ""; // 记录上一个路由，用于判断是否需要过渡动画
+
 function setActiveNav(route) {
   document.querySelectorAll(".site-nav a").forEach(a => {
     a.classList.toggle("active", a.dataset.route === route);
   });
 }
 
+/* 幕布过渡：从底部向上展开再向下收起 */
+function playCurtainTransition(callback) {
+  const curtain = document.createElement("div");
+  curtain.className = "page-curtain page-curtain--enter";
+  document.body.appendChild(curtain);
+  // 进入幕布完成后执行回调（渲染新页面），然后播放退出幕布
+  curtain.addEventListener("animationend", () => {
+    callback();
+    curtain.className = "page-curtain page-curtain--exit";
+    curtain.addEventListener("animationend", () => curtain.remove(), { once: true });
+    // 兜底移除
+    setTimeout(() => { if (curtain.isConnected) curtain.remove(); }, 700);
+  }, { once: true });
+}
+
+/* 给 $app 内容加淡入动画 */
+function fadeInContent() {
+  $app.classList.remove("content-fade-in");
+  // 触发 reflow 以重启动画
+  void $app.offsetWidth;
+  $app.classList.add("content-fade-in");
+}
+
 function router() {
   const hash = location.hash || "#/";
-  const parts = hash.replace(/^#\//, "").split("/"); // "" | "post/xxx" | "tag/xxx" | "tags" | "about"
+  const parts = hash.replace(/^#\//, "").split("/");
+  const currentRoute = parts[0] || "home";
 
-  if (parts[0] === "" || parts[0] === "home") {
-    setActiveNav("home"); viewHome();
-  } else if (parts[0] === "post") {
-    setActiveNav("home"); viewPost(parts[1]);
-  } else if (parts[0] === "tag") {
-    setActiveNav("tags"); viewTag(parts[1] || "");
-  } else if (parts[0] === "tags") {
-    setActiveNav("tags"); viewTags();
-  } else if (parts[0] === "about") {
-    setActiveNav("about"); viewAbout();
+  // 判断是否需要幕布过渡：封面↔文章区 / 文章列表↔详情
+  const fromLanding = (_prevRoute === "" || _prevRoute === "home");
+  const toLanding   = (currentRoute === "" || currentRoute === "home");
+  const needsCurtain = (fromLanding !== toLanding) || (_prevRoute === "blog" && currentRoute === "post") || (_prevRoute === "post" && currentRoute === "blog");
+
+  const render = () => {
+    if (currentRoute === "" || currentRoute === "home") {
+      setActiveNav("home"); viewLanding();
+    } else if (currentRoute === "blog") {
+      document.body.classList.add("on-blog"); setActiveNav("blog"); viewBlog();
+    } else if (currentRoute === "post") {
+      document.body.classList.add("on-blog"); setActiveNav("blog"); viewPost(parts[1]);
+    } else if (currentRoute === "tag") {
+      document.body.classList.add("on-blog"); setActiveNav("tags"); viewTag(parts[1] || "");
+    } else if (currentRoute === "tags") {
+      document.body.classList.add("on-blog"); setActiveNav("tags"); viewTags();
+    } else if (currentRoute === "about") {
+      document.body.classList.add("on-blog"); setActiveNav("about"); viewAbout();
+    } else {
+      document.body.classList.add("on-blog"); viewNotFound();
+    }
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    fadeInContent();
+    _prevRoute = currentRoute;
+  };
+
+  if (needsCurtain && _prevRoute !== "") {
+    playCurtainTransition(render);
   } else {
-    viewNotFound();
+    render();
   }
-  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
 }
 
 /* ---------------------- 初始化 ---------------------- */
 document.getElementById("year").textContent = new Date().getFullYear();
 
-document.getElementById("navToggle").addEventListener("click", () => {
-  document.getElementById("siteNav").classList.toggle("open");
-});
-
 window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", router);
 // 若脚本在 DOMContentLoaded 之后才执行，也确保渲染一次
 if (document.readyState !== "loading") router();
+
+/* ---------------------- 入场 loading 动画 ---------------------- */
+(function () {
+  const loader = document.getElementById("loader");
+  if (!loader) return;
+  const hide = () => {
+    loader.classList.add("loader--hidden");
+    loader.addEventListener("transitionend", () => loader.remove(), { once: true });
+    setTimeout(() => { if (loader.isConnected) loader.remove(); }, 1200); // 兜底移除
+  };
+  // 首屏渲染后稍作停顿再淡出（切入动画）
+  setTimeout(hide, 1100);
+})();
