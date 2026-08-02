@@ -562,15 +562,127 @@ body.on-blog .blog-head { padding-top: 72px; }
   border-radius: 6px;
 }
 
-/* ==================== 网易云音乐播放器（NeteaseMiniPlayer v3） ==================== */
-/* 强制固定在左下角，融入暗色主题；position 属性兜底，确保稳定左下 */
-nmp-player {
-  position: fixed !important;
-  left: 22px !important;
-  right: auto !important;
-  bottom: 22px !important;
+/* ==================== 音乐控件（播放器页面级 + 内联搜索） ==================== */
+/* 播放器恢复 NMP 原生页面级定位（position=bottom-right，可在 HTML 改任意角） */
+/* .music-dock 仅承载内联搜索栏，固定在左下角 */
+
+.music-dock {
+  position: fixed;
+  left: 22px;
+  bottom: 22px;
   z-index: 45;
+  display: flex;
+  align-items: flex-end;
 }
+
+/* ---------- 内联搜索栏：融入播放器内部（覆盖在歌曲信息右侧空白区域） ---------- */
+.ms-inline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  margin-left: -2px;   /* 轻微嵌入播放器边缘 */
+  z-index: 3;
+  pointer-events: auto; /* 确保可交互 */
+}
+.ms-inline-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid transparent;
+  transition: background .2s ease, border-color .2s ease, width .25s ease;
+  width: 34px;        /* 默认折叠：只显示图标宽度 */
+  min-width: 34px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.ms-inline-input-wrap:hover,
+.ms-inline-input-wrap.ms-active {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(120, 150, 220, .18);
+}
+.ms-inline-input-wrap.ms-active {
+  width: 180px;       /* 展开后的宽度 */
+  cursor: text;
+}
+.ms-inline .ms-search-icon {
+  color: var(--dark-text-dim);
+  flex-shrink: 0;
+  transition: color .2s ease;
+}
+.ms-inline-input-wrap:hover .ms-search-icon,
+.ms-inline-input-wrap.ms-active .ms-search-icon {
+  color: var(--dark-text-bright);
+}
+.ms-inline .ms-input {
+  flex: 1; min-width: 0;
+  background: transparent; border: none; outline: none;
+  color: var(--dark-text-bright); font-size: 13px;
+  width: 0;            /* 折叠时占零宽 */
+  opacity: 0;
+  transition: opacity .2s ease, width .2s ease;
+}
+.ms-inline-input-wrap.ms-active .ms-input {
+  width: 100%;
+  opacity: 1;
+}
+.ms-input::placeholder { color: var(--dark-text-dim); font-size: 12.5px; }
+.ms-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.ms-inline .ms-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--dark-text-dim); font-size: 13px;
+  padding: 1px 4px; border-radius: 6px;
+  flex-shrink: 0;
+  opacity: 0; width: 0; overflow: hidden;
+  transition: opacity .15s ease, width .15s ease;
+}
+.ms-inline-input-wrap.ms-active .ms-close {
+  opacity: 1; width: auto;
+}
+.ms-inline .ms-close:hover { color: var(--dark-text-bright); background: rgba(255, 255, 255, .06); }
+
+/* 搜索结果下拉（从输入框下方展开） */
+.ms-inline .ms-results {
+  list-style: none; margin: 5px 0 0; padding: 0;
+  position: absolute;
+  bottom: calc(100% + 6px);   /* 向上展开，避免遮挡播放器控制栏 */
+  right: 0;
+  width: 260px; max-width: 70vw;
+  border-radius: 12px;
+  padding: 8px;
+  background: rgba(10, 16, 30, .82);
+  border: 1px solid rgba(70, 110, 220, .22);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .5);
+  overflow-y: auto; max-height: 40vh;
+  display: flex; flex-direction: column; gap: 3px;
+  animation: msPop .2s ease;
+}
+.ms-inline .ms-results::-webkit-scrollbar { width: 5px; }
+.ms-inline .ms-results::-webkit-scrollbar-thumb { background: rgba(120, 150, 220, .3); border-radius: 3px; }
+@keyframes msPop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+
+/* 搜索结果条目 */
+.ms-result {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 9px;
+  cursor: pointer; transition: background .15s ease;
+}
+.ms-result:hover { background: rgba(90, 130, 255, .14); }
+.ms-cover {
+  width: 34px; height: 34px; border-radius: 7px; flex-shrink: 0;
+  background: rgba(255, 255, 255, .06) center / cover no-repeat;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dark-text-dim); font-size: 14px;
+}
+.ms-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ms-name { color: var(--dark-text-bright); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-artist { color: var(--dark-text-dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-dur { color: var(--dark-text-dim); font-size: 11px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.ms-status { color: var(--dark-text-dim); font-size: 11.5px; padding: 4px 2px 0; text-align: right; white-space: nowrap; }
 
 /* ==================== 响应式 ==================== */
 @media (max-width: 680px) {
@@ -588,4 +700,7 @@ nmp-player {
   body.on-blog #app { padding: 0 16px; }
   .friend-sites { margin-top: 28px; }
   .friend-card { padding: 8px 16px; font-size: 13px; }
+  .music-dock { left: 14px; bottom: 14px; }
+  .ms-inline-input-wrap.ms-active { width: 150px; }
+  .ms-inline .ms-results { width: 220px; }
 }

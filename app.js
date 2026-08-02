@@ -7,6 +7,84 @@
 /* ---------------------- 文章数据 ---------------------- */
 const POSTS = [
   {
+    id: "building-this-blog",
+    title: "从零搭一个纯静态博客：这一路的折腾与取舍",
+    date: "2026-08-03",
+    tags: ["前端", "静态博客", "GitHub Pages", "复盘"],
+    excerpt: "从空目录到能在线听歌、能搜歌，一个纯静态博客是怎么一步步长出来的，以及那些踩过的坑。",
+    content: [
+      "> 写在前面：这个博客（lotusor · 隙里碎笔）本身是纯静态的 HTML/CSS/JS，托管在 GitHub Pages 上。这篇文章就记录我从空目录到能在线听歌、能搜歌的完整过程，以及一些踩过的坑。",
+      "",
+      "## 为什么要自己搭",
+      "",
+      "现成的平台很多，但想要完全掌控样式、零运行成本、又能顺手练前端，纯静态 + GitHub Pages 是最轻的方案：",
+      "",
+      "- 不需要服务器，GitHub 免费托管",
+      "- 技术栈就是 HTML/CSS/JS，没有框架负担",
+      "- 文章用 Markdown 写，渲染交给前端库",
+      "",
+      "## 第一步：一个能「镇场」的封面",
+      "",
+      "博客第一眼是封面首页。我做了几件事：",
+      "",
+      "1. 毛玻璃（glassmorphism）卡片：`backdrop-filter: blur()`",
+      "2. 头像 + 社交图标",
+      "3. 一句诗意的文案",
+      "4. 入场 loader 动画",
+      "",
+      "背景参考了 emoera.com 的动态渐变，用多层 `radial-gradient` 加 `background-size` 动画做出缓慢流动的深色光晕。",
+      "",
+      "```css",
+      "background:",
+      "  radial-gradient(closest-side, rgba(80,120,255,.35), transparent) 20% 30% / 60vmax 60vmax,",
+      "  radial-gradient(closest-side, rgba(180,90,255,.30), transparent) 80% 70% / 55vmax 55vmax;",
+      "background-repeat: no-repeat;",
+      "animation: drift 18s ease-in-out infinite alternate;",
+      "```",
+      "",
+      "## 第二步：文章区与过渡",
+      "",
+      "文章列表和详情用 hash 路由（`#/blog`、`#/post/:id`）驱动，文章数据放在一个 `POSTS` 数组里，新增文章就是往数组加对象。",
+      "",
+      "进入文章时加了「幕布式」过渡：一层遮罩滑过，内容淡入，避免生硬跳转。",
+      "",
+      "## 第三步：右下角的音乐播放器",
+      "",
+      "想要一个能直接放歌的播放器，最后选了 NeteaseMiniPlayer v3（一个 Web Component），用公共 API 拉取歌曲。关键是把它设成页面级定位，可拖到任意角：",
+      "",
+      "```html",
+      "<nmp-player",
+      "  song-id='2127009514'",
+      "  theme='dark'",
+      "  layout='dock'",
+      "  position='bottom-right'",
+      "  lyric='true'></nmp-player>",
+      "```",
+      "",
+      "搜索框则「绑」在播放器旁边：用 JS 实时测量播放器的位置，把搜索栏吸附到它边上，缩放窗口或拖动播放器都会重新吸附。",
+      "",
+      "## 第四步：真的能搜歌",
+      "",
+      "公共 API 提供搜索接口，搜到歌曲后把 `song-id` 写回播放器，它监听到属性变化就自动重载并播放：",
+      "",
+      "```js",
+      "player.setAttribute('song-id', id);",
+      "player.play();",
+      "```",
+      "",
+      "## 踩过的坑",
+      "",
+      "- **git 浅克隆**：`--depth 1` 克隆后容易提交成游离状态，后来改完整克隆。",
+      "- **分支名带斜杠**：`feat/landing` 在某些情况下写不进引用，改成扁平名 `feat-landing-prototype`。",
+      "- **本地推送无凭据**：用 Personal Access Token 内联进 URL 推送。",
+      "- **仓库改名**：`-lotusor.github.io` 改名成 `start-now`，push 走 GitHub 重定向自动落到新仓库。",
+      "",
+      "## 写在最后",
+      "",
+      "一个纯静态博客，从封面到能听歌搜歌，核心代码没几行，但每一个「小功能」背后都是一堆取舍。把它记下来，下次就不必从头踩坑。"
+    ].join("\n")
+  },
+  {
     id: "markov-text-gen",
     title: "用 30 行 JavaScript 写一个迷你 Markov 链文本生成器",
     date: "2026-07-20",
@@ -527,4 +605,169 @@ if (document.readyState !== "loading") router();
   };
   // 首屏渲染后稍作停顿再淡出（切入动画）
   setTimeout(hide, 1100);
+})();
+
+/* ---------------------- 音乐搜索（内联搜索栏 → 写入 NMP 播放器 song-id） ---------------------- */
+(function () {
+  const search   = document.getElementById("musicSearch");
+  const inline   = document.getElementById("msInline");
+  const inputWrap = inline ? inline.querySelector(".ms-inline-input-wrap") : null;
+  const input    = document.getElementById("msInput");
+  const results  = document.getElementById("msResults");
+  const status   = document.getElementById("msStatus");
+  const closeBtn = document.getElementById("msClose");
+  if (!search || !inline || !inputWrap || !input || !results) return;
+
+  const API = "https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php";
+  let debounce, player = null, reqId = 0;
+
+  const getPlayer = () => (player ||= document.querySelector("nmp-player"));
+  const esc = (s) => String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDur = (ms) => {
+    const s = Math.round((ms || 0) / 1000);
+    if (!s) return "";
+    return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  };
+
+  /* 展开/折叠搜索输入框 */
+  const expand = () => {
+    inputWrap.classList.add("ms-active");
+    closeBtn.hidden = false;
+    setTimeout(() => input.focus(), 50);
+  };
+  const collapse = () => {
+    inputWrap.classList.remove("ms-active");
+    closeBtn.hidden = true;
+    input.value = "";
+    results.innerHTML = "";
+    results.hidden = true;
+    status.textContent = "";
+  };
+
+  /* 点击折叠状态的输入区域 → 展开 */
+  inputWrap.addEventListener("click", (e) => {
+    if (!inputWrap.classList.contains("ms-active")) {
+      e.preventDefault();
+      expand();
+    }
+  });
+
+  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); collapse(); });
+
+  /* 点击外部收起 */
+  document.addEventListener("click", (e) => {
+    if (inputWrap.classList.contains("ms-active") && !inline.contains(e.target)) {
+      if (!results.hidden && results.children.length > 0) {
+        results.hidden = true;
+      } else {
+        collapse();
+      }
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && inputWrap.classList.contains("ms-active")) collapse();
+  });
+
+  /* 输入防抖搜索 */
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    const q = input.value.trim();
+    if (!q) { results.innerHTML = ""; results.hidden = true; status.textContent = ""; return; }
+    status.textContent = "搜索中…";
+    const my = ++reqId;
+    debounce = setTimeout(() => doSearch(q, my), 350);
+  });
+
+  async function doSearch(q, my) {
+    try {
+      const res = await fetch(`${API}/search?keywords=${encodeURIComponent(q)}&limit=15`);
+      const data = await res.json();
+      if (my !== reqId) return; // 已有更新的请求，丢弃旧结果
+      const songs = (data.result && data.result.songs) || [];
+      if (!songs.length) { results.innerHTML = ""; results.hidden = true; status.textContent = "无结果"; return; }
+
+      // 批量取封面
+      const ids = songs.map(s => s.id).join(",");
+      const coverMap = {};
+      try {
+        const d2 = await (await fetch(`${API}/song/detail?ids=${ids}`)).json();
+        (d2.songs || []).forEach(s => { if (s.id != null && s.al && s.al.picUrl) coverMap[s.id] = s.al.picUrl; });
+      } catch (_) {}
+
+      results.innerHTML = songs.map(s => {
+        const arts = (s.artists || s.ar || []).map(a => a.name).join("/") || "未知歌手";
+        const cover = coverMap[s.id] || "";
+        const dur = fmtDur(s.duration || s.dt);
+        return `<li class="ms-result" data-id="${s.id}">
+          <span class="ms-cover" ${cover ? `style="background-image:url('${cover}')"` : ""}>♪</span>
+          <span class="ms-meta">
+            <span class="ms-name">${esc(s.name)}</span>
+            <span class="ms-artist">${esc(arts)}</span>
+          </span>
+          <span class="ms-dur">${dur}</span>
+        </li>`;
+      }).join("");
+      results.hidden = false;
+      status.textContent = "";
+    } catch (err) {
+      if (my !== reqId) return;
+      results.innerHTML = ""; results.hidden = true; status.textContent = "失败";
+    }
+  }
+
+  /* 点结果 → 切歌 */
+  function tryPlay(p, times) {
+    if (!times) return;
+    setTimeout(() => { try { p.play && p.play(); } catch (_) {}; tryPlay(p, times - 1); }, 900);
+  }
+  results.addEventListener("click", (e) => {
+    const li = e.target.closest(".ms-result");
+    if (!li) return;
+    const p = getPlayer();
+    if (p) {
+      p.setAttribute("song-id", li.dataset.id);
+      tryPlay(p, 3); // 等歌曲加载完成后尝试自动播放（多次兜底 API 延迟）
+    }
+    collapse();
+  });
+})();
+
+/* ---------------------- 搜索栏吸附到播放器（页面级定位，跟随播放器位置） ---------------------- */
+(function () {
+  const player = document.querySelector("nmp-player");
+  const dock = document.getElementById("musicSearch");
+  if (!player || !dock) return;
+
+  /* 测量播放器实际位置，把搜索栏吸附到它旁边（同侧贴边，展开时不遮挡播放器） */
+  function bindSearchToPlayer() {
+    const r = player.getBoundingClientRect();
+    if (!r.width || !r.height) return; // 播放器尚未渲染完
+    const gap = 12;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // 重置所有定位，避免脏值
+    dock.style.left = dock.style.right = dock.style.top = dock.style.bottom = "auto";
+    const onRight = r.left > vw / 2;   // 播放器在右半屏 → 搜索栏贴其左侧
+    const onBottom = r.top > vh / 2;   // 播放器在底部 → 底部对齐
+    if (onRight) { dock.style.right = (vw - r.left + gap) + "px"; }
+    else         { dock.style.left  = (r.right + gap) + "px"; }
+    if (onBottom) { dock.style.bottom = (vh - r.bottom) + "px"; }
+    else          { dock.style.top    = r.top + "px"; }
+  }
+
+  // 播放器异步渲染：轮询直到有尺寸，然后停止
+  let tries = 0;
+  const iv = setInterval(() => {
+    if (player.getBoundingClientRect().width) {
+      bindSearchToPlayer();
+      clearInterval(iv);
+    } else if (++tries > 50) clearInterval(iv);
+  }, 100);
+
+  // 窗口缩放 / 播放器位置或样式变化（含拖拽）时重绑
+  window.addEventListener("resize", bindSearchToPlayer);
+  if (player.getBoundingClientRect().width) bindSearchToPlayer();
+  try {
+    new MutationObserver(bindSearchToPlayer).observe(player, { attributes: true });
+  } catch (_) {}
 })();

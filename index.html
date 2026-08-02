@@ -36,20 +36,33 @@
     <p class="footer-sub">基于纯静态 HTML / CSS / JS 构建，Markdown 由 marked.js 渲染。</p>
   </footer>
 
-  <!-- 左下角网易云音乐播放器（NeteaseMiniPlayer v3 · 公用 API · 单曲《春夜坠落》Bo Peep） -->
+  <!-- 音乐播放器（页面级定位：position 可改为 bottom-left / bottom-right / top-left / top-right） -->
   <nmp-player
     song-id="2127009514"
     theme="dark"
     layout="dock"
-    position="bottom-left"
+    position="bottom-right"
     lyric="true"
     default-minimized="false"
     storage-key="lotusor-blog"></nmp-player>
 
+  <!-- 内联搜索栏（固定在左下角，与播放器相互独立） -->
+  <div class="music-dock" id="musicSearch">
+    <div class="ms-inline" id="msInline">
+      <div class="ms-inline-input-wrap">
+        <svg class="ms-search-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+        <input class="ms-input" id="msInput" type="search" placeholder="搜歌曲" autocomplete="off" aria-label="搜索歌曲" />
+        <button class="ms-close" id="msClose" type="button" aria-label="关闭搜索" hidden>✕</button>
+      </div>
+      <ul class="ms-results" id="msResults" hidden></ul>
+      <div class="ms-status" id="msStatus"></div>
+    </div>
+  </div>
+
   <!-- Markdown 解析与代码高亮（CDN） -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
-  <script src="app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/netease-mini-player-v3@3.0.1/dist/nmpv3.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
