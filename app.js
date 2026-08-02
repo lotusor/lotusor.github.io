@@ -1,0 +1,412 @@
+/* =========================================================
+   码间随笔 — 纯静态个人博客
+   路由 + Markdown 渲染（marked.js）+ 代码高亮（highlight.js）
+   文章数据在 POSTS 数组中，新增文章只需往里加对象即可。
+   ========================================================= */
+
+/* ---------------------- 文章数据 ---------------------- */
+const POSTS = [
+  {
+    id: "markov-text-gen",
+    title: "用 30 行 JavaScript 写一个迷你 Markov 链文本生成器",
+    date: "2026-07-20",
+    tags: ["JavaScript", "算法", "有趣"],
+    excerpt: "不依赖任何库，用一阶马尔可夫链把一段语料「学」成自己的文风，再吐出看似通顺的胡话。",
+    content: [
+      "马尔可夫链的核心思想很简单：**下一个词只取决于当前词**。我们用它来「模仿」一段文本的风格。",
+      "",
+      "## 思路",
+      "",
+      "1. 把语料按词切开",
+      "2. 统计「当前词 → 下一个词」的出现频率",
+      "3. 随机游走生成新文本",
+      "",
+      "## 代码",
+      "",
+      "```js",
+      "function buildChain(text) {",
+      "  const words = text.split(/\\s+/).filter(Boolean);",
+      "  const chain = {};",
+      "  for (let i = 0; i < words.length - 1; i++) {",
+      "    const cur = words[i];",
+      "    const next = words[i + 1];",
+      "    (chain[cur] = chain[cur] || []).push(next);",
+      "  }",
+      "  return chain;",
+      "}",
+      "",
+      "function generate(chain, start, len = 30) {",
+      "  let word = start in chain ? start : Object.keys(chain)[0];",
+      "  const out = [word];",
+      "  for (let i = 0; i < len; i++) {",
+      "    const candidates = chain[word];",
+      "    if (!candidates || !candidates.length) break;",
+      "    word = candidates[Math.floor(Math.random() * candidates.length)];",
+      "    out.push(word);",
+      "  }",
+      "  return out.join(\" \");",
+      "}",
+      "",
+      "const chain = buildChain(\"代码 是 诗 代码 也是 工具 诗 让人 安静\");",
+      "console.log(generate(chain, \"代码\"));",
+      "```",
+      "",
+      "## 效果",
+      "",
+      "喂进去的句子很短，所以生成结果会比较「repeat」。真实场景里把一整本小说当语料，效果会惊艳很多。",
+      "",
+      "> 小提示：语料越大，生成的文本越「像人话」，但也越容易抄袭原文——注意版权。"
+    ].join("\n")
+  },
+  {
+    id: "http-cache-explained",
+    title: "把 HTTP 缓存讲清楚：从强缓存到协商缓存",
+    date: "2026-07-12",
+    tags: ["前端", "HTTP", "性能"],
+    excerpt: "强缓存不发请求，协商缓存发请求但可能 304。一张表 + 几个 Header 就能记住。",
+    content: [
+      "缓存是前端性能优化的第一道关。先记住一句话：**强缓存不询问服务器，协商缓存会询问但可能拿到 304。**",
+      "",
+      "## 两类缓存",
+      "",
+      "| 类型 | 关键 Header | 是否发请求 | 典型状态码 |",
+      "| --- | --- | --- | --- |",
+      "| 强缓存 | Cache-Control / Expires | 否 | 200 (from disk cache) |",
+      "| 协商缓存 | ETag / Last-Modified | 是 | 304 或 200 |",
+      "",
+      "## 强缓存优先级",
+      "",
+      "```http",
+      "Cache-Control: max-age=3600, public",
+      "Expires: Wed, 21 Oct 2026 07:28:00 GMT",
+      "```",
+      "",
+      "现代浏览器优先看 `Cache-Control` 的 `max-age`（相对时间），`Expires` 是绝对时间，容易被时钟漂移影响。",
+      "",
+      "## 协商缓存",
+      "",
+      "当强缓存失效，浏览器带上条件请求：",
+      "",
+      "```http",
+      "If-None-Match: \"abc123\"      # 对应响应的 ETag",
+      "If-Modified-Since: <date>    # 对应响应的 Last-Modified",
+      "```",
+      "",
+      "服务器比对后，没变就回 `304 Not Modified`，省下传输体积。",
+      "",
+      "## 实践建议",
+      "",
+      "- 带 hash 的静态资源（`app.4f3a.js`）用 `max-age=31536000, immutable`",
+      "- HTML 用 `no-cache` 让它能走协商，保证及时更新",
+      "- 上线前用 DevTools 的 Network 面板确认缓存命中情况"
+    ].join("\n")
+  },
+  {
+    id: "write-a-vite-plugin",
+    title: "从零写一个 Vite 插件：自动为组件加前缀",
+    date: "2026-06-28",
+    tags: ["前端", "Vite", "工程化"],
+    excerpt: "理解 Vite 插件就是一串钩子函数，再动手实现一个「自动给类名加项目前缀」的小工具。",
+    content: [
+      "Vite 插件本质上是一个**带钩子（hook）的对象**。最常用的钩子是 `transform`，它能在模块被加载时改写源码。",
+      "",
+      "## 最小骨架",
+      "",
+      "```js",
+      "export default function myPlugin(options = {}) {",
+      "  return {",
+      "    name: \"vite-plugin-prefix\",",
+      "    transform(code, id) {",
+      "      // 只处理 .vue 文件",
+      "      if (!id.endsWith(\".vue\")) return null;",
+      "      const prefixed = code.replace(/class=\"([^\"]+)\"/g,",
+      "        (_, cls) => `class=\"kb-${cls}\"`);",
+      "      return { code: prefixed, map: null };",
+      "    }",
+      "  };",
+      "}",
+      "```",
+      "",
+      "## 使用",
+      "",
+      "```js",
+      "// vite.config.js",
+      "import prefix from \"./my-plugin\";",
+      "export default {",
+      "  plugins: [prefix()]",
+      "};",
+      "```",
+      "",
+      "## 几个注意点",
+      "",
+      "1. 钩子返回 `null` 表示「我不处理这个文件」，Vite 会继续往下走",
+      "2. 改动源码后最好返回新的 `map`，否则 SourceMap 会错位",
+      "3. 插件顺序会影响结果，`enforce: \"pre\" | \"post\"` 可以调整先后",
+      "",
+      "写插件最大的乐趣，是发现「原来构建工具也不过是一串函数」。"
+    ].join("\n")
+  },
+  {
+    id: "love-pure-functions",
+    title: "为什么我越来越喜欢纯函数",
+    date: "2026-06-10",
+    tags: ["JavaScript", "心得", "函数式"],
+    excerpt: "同样的输入永远得到同样的输出，没有隐藏状态——这种「无聊」恰恰是它的优点。",
+    content: [
+      "纯函数有两个铁律：",
+      "",
+      "1. **相同输入永远得到相同输出**",
+      "2. **没有副作用**（不改全局变量、不发请求、不碰 DOM）",
+      "",
+      "## 对比一下",
+      "",
+      "```js",
+      "// 不纯：依赖外部状态，结果不可预测",
+      "let taxRate = 0.1;",
+      "function withTax(price) { return price * (1 + taxRate); }",
+      "",
+      "// 纯：所有依赖都显式传入",
+      "function withTaxPure(price, rate) { return price * (1 + rate); }",
+      "```",
+      "",
+      "## 好处",
+      "",
+      "- **好测试**：不用 mock 环境，直接断言返回值",
+      "- **好推理**：读到调用处就能知道结果，不用翻上下文",
+      "- **好并行**：没有共享状态，天然线程安全",
+      "- **好缓存**：可以用 `memoize` 记住计算结果",
+      "",
+      "> 当然，程序最终总要「做点什么」（写库、发请求）。纯函数的价值在于把**计算**和**副作用**分开，让核心逻辑保持干净。",
+      "",
+      "不是所有代码都要纯，但把能纯的部分提纯，复杂度会肉眼可见地下降。"
+    ].join("\n")
+  },
+  {
+    id: "git-rebase-clean-history",
+    title: "Git 提交历史乱了？用 rebase 收拾干净",
+    date: "2026-05-22",
+    tags: ["Git", "工具", "心得"],
+    excerpt: "「fix typo」「再来一次」堆了一屏？rebase -i 帮你把提交压成一条干净的故事线。",
+    content: [
+      "本地分支还没推送到远端前，历史随便怎么收拾都行。交互式 rebase 是最常用的整理工具。",
+      "",
+      "## 启动交互式 rebase",
+      "",
+      "```bash",
+      "git rebase -i HEAD~4",
+      "```",
+      "",
+      "会打开一个编辑器，列出最近 4 个提交：",
+      "",
+      "```",
+      "pick a1b2c3 添加登录接口",
+      "pick d4e5f6 fix typo",
+      "pick 7a8b9c 补充单元测试",
+      "pick 0d1e2f 再来一次",
+      "```",
+      "",
+      "## 常用操作",
+      "",
+      "- `pick` → 保留",
+      "- `squash` / `fixup` → 合并到上一个提交（fixup 丢弃提交信息）",
+      "- `reword` → 改提交信息",
+      "- `drop` → 删除该提交",
+      "",
+      "把后三个改成 `fixup`，就能压成一条干净的提交。",
+      "",
+      "## 黄金法则",
+      "",
+      "> **只 rebase 你自己的、还没推送到公共分支的提交。** 已经推给别人、且别人基于它工作的历史，千万别动——那会制造「分叉的真相」。",
+      "",
+      "整理完的历史就像一篇排版好的文章：别人一眼能看懂你为什么这么改。"
+    ].join("\n")
+  }
+];
+
+/* ---------------------- 工具函数 ---------------------- */
+const $app = document.getElementById("app");
+
+function byDateDesc(a, b) {
+  return a.date < b.date ? 1 : -1;
+}
+
+function allTags() {
+  const map = new Map();
+  POSTS.forEach(p => p.tags.forEach(t => map.set(t, (map.get(t) || 0) + 1)));
+  return [...map.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function tagLink(tag) {
+  return `<a class="tag" href="#/tag/${encodeURIComponent(tag)}">${tag}</a>`;
+}
+
+/* ---------------------- Markdown 渲染 ---------------------- */
+function renderMarkdown(md) {
+  if (typeof marked === "undefined") {
+    return `<p class="empty">Markdown 解析库未能加载（请检查网络后刷新）。</p>`;
+  }
+  marked.setOptions({ gfm: true, breaks: true });
+  return marked.parse(md);
+}
+
+function highlightWithin(root) {
+  if (typeof hljs === "undefined") return;
+  root.querySelectorAll("pre code").forEach(el => {
+    try { hljs.highlightElement(el); } catch (e) { /* ignore */ }
+  });
+}
+
+/* ---------------------- 视图 ---------------------- */
+function viewHome() {
+  const posts = [...POSTS].sort(byDateDesc);
+  const tags = allTags().slice(0, 8);
+  const cards = posts.map(postCard).join("");
+  $app.innerHTML = `
+    <section class="hero">
+      <h1>码间随笔</h1>
+      <p>一个专注编程与技术随笔的地方。这里记录我用代码理解世界的过程——有些是踩坑，有些是顿悟。</p>
+    </section>
+    <h2 class="section-title">最新文章 <span class="count">${posts.length} 篇</span></h2>
+    <div class="post-list">${cards}</div>
+    ${tags.length ? `<h2 class="section-title" style="margin-top:34px">热门标签</h2>
+      <div class="tag-row">${tags.map(([t]) => tagLink(t)).join("")}</div>` : ""}
+  `;
+}
+
+function postCard(p) {
+  return `
+    <article class="post-card">
+      <h2><a href="#/post/${p.id}">${p.title}</a></h2>
+      <div class="post-meta">
+        <span>📅 ${p.date}</span>
+        <span>🏷 ${p.tags.join(" · ")}</span>
+      </div>
+      <p class="post-excerpt">${p.excerpt}</p>
+      <div class="tag-row">${p.tags.map(t => tagLink(t)).join("")}</div>
+    </article>
+  `;
+}
+
+function viewPost(id) {
+  const p = POSTS.find(x => x.id === id);
+  if (!p) { viewNotFound(); return; }
+  $app.innerHTML = `
+    <article class="article">
+      <a class="back-link" href="#/">← 返回文章列表</a>
+      <header class="article-header">
+        <h1>${p.title}</h1>
+        <div class="post-meta">
+          <span>📅 ${p.date}</span>
+          <span>🏷 ${p.tags.join(" · ")}</span>
+        </div>
+      </header>
+      <div class="article-body">${renderMarkdown(p.content)}</div>
+    </article>
+  `;
+  highlightWithin($app);
+}
+
+function viewTag(tag) {
+  const decoded = decodeURIComponent(tag);
+  const posts = POSTS.filter(p => p.tags.includes(decoded)).sort(byDateDesc);
+  const cards = posts.length ? posts.map(postCard).join("")
+    : `<p class="empty">这个标签下还没有文章。</p>`;
+  $app.innerHTML = `
+    <h2 class="section-title">标签：${decoded} <span class="count">${posts.length} 篇</span></h2>
+    <a class="back-link" href="#/">← 返回首页</a>
+    <div class="post-list">${cards}</div>
+  `;
+}
+
+function viewTags() {
+  const tags = allTags();
+  $app.innerHTML = `
+    <h2 class="section-title">全部标签 <span class="count">${tags.length} 个</span></h2>
+    <div class="tag-cloud">
+      ${tags.map(([t, c]) => `<a class="tag" href="#/tag/${encodeURIComponent(t)}">${t}<span class="tag-count">${c}</span></a>`).join("")}
+    </div>
+  `;
+}
+
+function viewAbout() {
+  $app.innerHTML = `
+    <section class="about">
+      <h1>关于我</h1>
+      <p class="lead">你好，我是一个喜欢把复杂问题拆成小函数的人。白天写业务代码，晚上写一些「没什么用但很有趣」的小工具。</p>
+
+      <div class="about-section">
+        <h2>我关注的方向</h2>
+        <p>前端工程化、可视化、以及一切能让开发体验变好的小技巧。相信「能跑起来的代码」比「完美的架构图」更有说服力。</p>
+      </div>
+
+      <div class="about-section">
+        <h2>技术栈</h2>
+        <div class="skill-list">
+          <span class="skill">JavaScript / TypeScript</span>
+          <span class="skill">React / Vue</span>
+          <span class="skill">Node.js</span>
+          <span class="skill">Vite / Webpack</span>
+          <span class="skill">Python</span>
+          <span class="skill">Git</span>
+        </div>
+      </div>
+
+      <div class="about-section">
+        <h2>写这个博客的初衷</h2>
+        <p>把学过的东西讲清楚，是最好的复习。如果某一篇文章恰好帮你省了半小时调试时间，那就值了。</p>
+      </div>
+
+      <div class="about-section">
+        <h2>找到我</h2>
+        <div class="link-list">
+          <a href="#/">← 回到文章</a>
+          <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+          <a href="mailto:hi@example.com">Email</a>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function viewNotFound() {
+  $app.innerHTML = `<p class="empty">没有找到这个页面。<a href="#/">回到首页</a></p>`;
+}
+
+/* ---------------------- 路由 ---------------------- */
+function setActiveNav(route) {
+  document.querySelectorAll(".site-nav a").forEach(a => {
+    a.classList.toggle("active", a.dataset.route === route);
+  });
+}
+
+function router() {
+  const hash = location.hash || "#/";
+  const parts = hash.replace(/^#\//, "").split("/"); // "" | "post/xxx" | "tag/xxx" | "tags" | "about"
+
+  if (parts[0] === "" || parts[0] === "home") {
+    setActiveNav("home"); viewHome();
+  } else if (parts[0] === "post") {
+    setActiveNav("home"); viewPost(parts[1]);
+  } else if (parts[0] === "tag") {
+    setActiveNav("tags"); viewTag(parts[1] || "");
+  } else if (parts[0] === "tags") {
+    setActiveNav("tags"); viewTags();
+  } else if (parts[0] === "about") {
+    setActiveNav("about"); viewAbout();
+  } else {
+    viewNotFound();
+  }
+  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+
+/* ---------------------- 初始化 ---------------------- */
+document.getElementById("year").textContent = new Date().getFullYear();
+
+document.getElementById("navToggle").addEventListener("click", () => {
+  document.getElementById("siteNav").classList.toggle("open");
+});
+
+window.addEventListener("hashchange", router);
+window.addEventListener("DOMContentLoaded", router);
+// 若脚本在 DOMContentLoaded 之后才执行，也确保渲染一次
+if (document.readyState !== "loading") router();
