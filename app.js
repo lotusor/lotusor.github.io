@@ -529,16 +529,16 @@ if (document.readyState !== "loading") router();
   setTimeout(hide, 1100);
 })();
 
-/* ---------------------- 音乐搜索（在线搜歌 → 写入 NMP 播放器 song-id） ---------------------- */
+/* ---------------------- 音乐搜索（内联搜索栏 → 写入 NMP 播放器 song-id） ---------------------- */
 (function () {
-  const search  = document.getElementById("musicSearch");
-  const toggle  = document.getElementById("msToggle");
-  const panel   = document.getElementById("msPanel");
-  const input   = document.getElementById("msInput");
-  const results = document.getElementById("msResults");
-  const status  = document.getElementById("msStatus");
+  const search   = document.getElementById("musicSearch");
+  const inline   = document.getElementById("msInline");
+  const inputWrap = inline ? inline.querySelector(".ms-inline-input-wrap") : null;
+  const input    = document.getElementById("msInput");
+  const results  = document.getElementById("msResults");
+  const status   = document.getElementById("msStatus");
   const closeBtn = document.getElementById("msClose");
-  if (!search || !toggle || !panel || !input || !results) return;
+  if (!search || !inline || !inputWrap || !input || !results) return;
 
   const API = "https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php";
   let debounce, player = null, reqId = 0;
@@ -552,21 +552,50 @@ if (document.readyState !== "loading") router();
     return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
   };
 
-  const openPanel = () => { panel.hidden = false; setTimeout(() => input.focus(), 30); };
-  const closePanel = () => {
-    panel.hidden = true;
-    input.value = ""; results.innerHTML = ""; status.textContent = "";
+  /* 展开/折叠搜索输入框 */
+  const expand = () => {
+    inputWrap.classList.add("ms-active");
+    closeBtn.hidden = false;
+    setTimeout(() => input.focus(), 50);
+  };
+  const collapse = () => {
+    inputWrap.classList.remove("ms-active");
+    closeBtn.hidden = true;
+    input.value = "";
+    results.innerHTML = "";
+    results.hidden = true;
+    status.textContent = "";
   };
 
-  toggle.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
-  closeBtn.addEventListener("click", closePanel);
-  document.addEventListener("click", (e) => { if (!panel.hidden && !search.contains(e.target)) closePanel(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) closePanel(); });
+  /* 点击折叠状态的输入区域 → 展开 */
+  inputWrap.addEventListener("click", (e) => {
+    if (!inputWrap.classList.contains("ms-active")) {
+      e.preventDefault();
+      expand();
+    }
+  });
 
+  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); collapse(); });
+
+  /* 点击外部收起 */
+  document.addEventListener("click", (e) => {
+    if (inputWrap.classList.contains("ms-active") && !inline.contains(e.target)) {
+      if (!results.hidden && results.children.length > 0) {
+        results.hidden = true;
+      } else {
+        collapse();
+      }
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && inputWrap.classList.contains("ms-active")) collapse();
+  });
+
+  /* 输入防抖搜索 */
   input.addEventListener("input", () => {
     clearTimeout(debounce);
     const q = input.value.trim();
-    if (!q) { results.innerHTML = ""; status.textContent = ""; return; }
+    if (!q) { results.innerHTML = ""; results.hidden = true; status.textContent = ""; return; }
     status.textContent = "搜索中…";
     const my = ++reqId;
     debounce = setTimeout(() => doSearch(q, my), 350);
@@ -578,9 +607,9 @@ if (document.readyState !== "loading") router();
       const data = await res.json();
       if (my !== reqId) return; // 已有更新的请求，丢弃旧结果
       const songs = (data.result && data.result.songs) || [];
-      if (!songs.length) { results.innerHTML = ""; status.textContent = "没有找到相关歌曲"; return; }
+      if (!songs.length) { results.innerHTML = ""; results.hidden = true; status.textContent = "无结果"; return; }
 
-      // 批量取封面（一次请求），失败不影响播放
+      // 批量取封面
       const ids = songs.map(s => s.id).join(",");
       const coverMap = {};
       try {
@@ -601,14 +630,15 @@ if (document.readyState !== "loading") router();
           <span class="ms-dur">${dur}</span>
         </li>`;
       }).join("");
+      results.hidden = false;
       status.textContent = "";
     } catch (err) {
       if (my !== reqId) return;
-      results.innerHTML = ""; status.textContent = "搜索失败，请稍后重试";
+      results.innerHTML = ""; results.hidden = true; status.textContent = "失败";
     }
   }
 
-  // 点结果：把 song-id 写回 NMP 播放器，它监听到后会重新加载并播放该歌曲
+  /* 点结果 → 切歌 */
   function tryPlay(p, times) {
     if (!times) return;
     setTimeout(() => { try { p.play && p.play(); } catch (_) {}; tryPlay(p, times - 1); }, 900);
@@ -621,6 +651,45 @@ if (document.readyState !== "loading") router();
       p.setAttribute("song-id", li.dataset.id);
       tryPlay(p, 3); // 等歌曲加载完成后尝试自动播放（多次兜底 API 延迟）
     }
-    closePanel();
+    collapse();
   });
+})();
+
+/* ---------------------- 搜索栏吸附到播放器（页面级定位，跟随播放器位置） ---------------------- */
+(function () {
+  const player = document.querySelector("nmp-player");
+  const dock = document.getElementById("musicSearch");
+  if (!player || !dock) return;
+
+  /* 测量播放器实际位置，把搜索栏吸附到它旁边（同侧贴边，展开时不遮挡播放器） */
+  function bindSearchToPlayer() {
+    const r = player.getBoundingClientRect();
+    if (!r.width || !r.height) return; // 播放器尚未渲染完
+    const gap = 12;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // 重置所有定位，避免脏值
+    dock.style.left = dock.style.right = dock.style.top = dock.style.bottom = "auto";
+    const onRight = r.left > vw / 2;   // 播放器在右半屏 → 搜索栏贴其左侧
+    const onBottom = r.top > vh / 2;   // 播放器在底部 → 底部对齐
+    if (onRight) { dock.style.right = (vw - r.left + gap) + "px"; }
+    else         { dock.style.left  = (r.right + gap) + "px"; }
+    if (onBottom) { dock.style.bottom = (vh - r.bottom) + "px"; }
+    else          { dock.style.top    = r.top + "px"; }
+  }
+
+  // 播放器异步渲染：轮询直到有尺寸，然后停止
+  let tries = 0;
+  const iv = setInterval(() => {
+    if (player.getBoundingClientRect().width) {
+      bindSearchToPlayer();
+      clearInterval(iv);
+    } else if (++tries > 50) clearInterval(iv);
+  }, 100);
+
+  // 窗口缩放 / 播放器位置或样式变化（含拖拽）时重绑
+  window.addEventListener("resize", bindSearchToPlayer);
+  if (player.getBoundingClientRect().width) bindSearchToPlayer();
+  try {
+    new MutationObserver(bindSearchToPlayer).observe(player, { attributes: true });
+  } catch (_) {}
 })();
