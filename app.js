@@ -257,16 +257,61 @@ function highlightWithin(root) {
 }
 
 /* ---------------------- 视图 ---------------------- */
-function viewHome() {
+/* ---------------------- 社交链接（封面用，后期替换为你的主页） ---------------------- */
+const SOCIALS = [
+  { name: "Bilibili", url: "https://space.bilibili.com", icon: "https://www.bilibili.com/favicon.ico" },
+  { name: "牛客",     url: "https://www.nowcoder.com",  icon: "https://www.nowcoder.com/favicon.ico" },
+  { name: "GitHub",   url: "https://github.com",        icon: "https://github.com/favicon.ico" }
+  // TODO: 把上面的 url 替换成你自己的主页地址
+];
+
+function socialLink(s) {
+  return `
+    <a class="social glass" href="${s.url}" target="_blank" rel="noopener" title="${s.name}" aria-label="${s.name}">
+      <img src="${s.icon}" alt="${s.name}" loading="lazy"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" />
+      <span class="social-fallback">${s.name.charAt(0)}</span>
+    </a>`;
+}
+
+/* ---------------------- 封面（首页原型） ---------------------- */
+function viewLanding() {
+  const socials = SOCIALS.map(socialLink).join("");
+  $app.innerHTML = `
+    <section class="cover">
+      <div class="cover-avatar" id="coverAvatar">
+        <!-- 替换为你的头像：<img src="assets/avatar.jpg" alt="头像" /> -->
+        <svg viewBox="0 0 24 24" width="60" height="60" aria-hidden="true">
+          <path fill="currentColor" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.4 0-8 2.7-8 6v2h16v-2c0-3.3-3.6-6-8-6Z"/>
+        </svg>
+      </div>
+      <p class="cover-quote">所有的命运都已写就，<br>所有的泪水都将启程</p>
+      <div class="cover-socials">
+        ${socials}
+        <div class="social glass qq" title="QQ 二维码（占位，待替换）" aria-label="QQ 二维码占位">
+          <!-- 后期替换为你的 QQ 二维码：<img src="assets/qq-qr.png" alt="QQ 二维码" /> -->
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 3"/>
+            <path fill="currentColor" d="M8 8h8v8H8z" opacity=".22"/>
+          </svg>
+        </div>
+      </div>
+      <a class="my-think glass" href="#/blog">MY-THINK →</a>
+    </section>
+  `;
+}
+
+/* ---------------------- 文章列表（MY-THINK 进入） ---------------------- */
+function viewBlog() {
   const posts = [...POSTS].sort(byDateDesc);
   const tags = allTags().slice(0, 8);
   const cards = posts.map(postCard).join("");
   $app.innerHTML = `
-    <section class="hero">
-      <h1>码间随笔</h1>
-      <p>一个专注编程与技术随笔的地方。这里记录我用代码理解世界的过程——有些是踩坑，有些是顿悟。</p>
+    <section class="blog-head">
+      <a class="back-link" href="#/">← 返回封面</a>
+      <h1 class="blog-title">文章</h1>
+      <p class="blog-sub">记录用代码理解世界的过程——有些是踩坑，有些是顿悟。</p>
     </section>
-    <h2 class="section-title">最新文章 <span class="count">${posts.length} 篇</span></h2>
     <div class="post-list">${cards}</div>
     ${tags.length ? `<h2 class="section-title" style="margin-top:34px">热门标签</h2>
       <div class="tag-row">${tags.map(([t]) => tagLink(t)).join("")}</div>` : ""}
@@ -384,9 +429,11 @@ function router() {
   const parts = hash.replace(/^#\//, "").split("/"); // "" | "post/xxx" | "tag/xxx" | "tags" | "about"
 
   if (parts[0] === "" || parts[0] === "home") {
-    setActiveNav("home"); viewHome();
+    setActiveNav("home"); viewLanding();
+  } else if (parts[0] === "blog") {
+    setActiveNav("blog"); viewBlog();
   } else if (parts[0] === "post") {
-    setActiveNav("home"); viewPost(parts[1]);
+    setActiveNav("blog"); viewPost(parts[1]);
   } else if (parts[0] === "tag") {
     setActiveNav("tags"); viewTag(parts[1] || "");
   } else if (parts[0] === "tags") {
@@ -410,3 +457,16 @@ window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", router);
 // 若脚本在 DOMContentLoaded 之后才执行，也确保渲染一次
 if (document.readyState !== "loading") router();
+
+/* ---------------------- 入场 loading 动画 ---------------------- */
+(function () {
+  const loader = document.getElementById("loader");
+  if (!loader) return;
+  const hide = () => {
+    loader.classList.add("loader--hidden");
+    loader.addEventListener("transitionend", () => loader.remove(), { once: true });
+    setTimeout(() => { if (loader.isConnected) loader.remove(); }, 1200); // 兜底移除
+  };
+  // 首屏渲染后稍作停顿再淡出（切入动画）
+  setTimeout(hide, 1100);
+})();

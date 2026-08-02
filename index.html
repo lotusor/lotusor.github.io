@@ -7,8 +7,17 @@
   <meta name="description" content="一个专注编程与技术随笔的个人博客，支持 Markdown 渲染、标签分类与代码高亮。" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="landing.css" />
 </head>
 <body>
+  <!-- 入场 loading 动画（仅在首次加载展示，结束后淡出） -->
+  <div id="loader" class="loader" aria-hidden="true">
+    <div class="loader-inner">
+      <div class="loader-mark">&lt;/&gt;</div>
+      <div class="loader-bar"><span></span></div>
+    </div>
+  </div>
+
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="#/" data-link>
@@ -17,6 +26,7 @@
       </a>
       <nav class="site-nav" id="siteNav">
         <a href="#/" data-link data-route="home">首页</a>
+        <a href="#/blog" data-link data-route="blog">文章</a>
         <a href="#/tags" data-link data-route="tags">标签</a>
         <a href="#/about" data-link data-route="about">关于</a>
       </nav>
