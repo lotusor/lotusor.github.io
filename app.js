@@ -607,21 +607,20 @@ if (document.readyState !== "loading") router();
   setTimeout(hide, 1100);
 })();
 
-/* ---------------------- 音乐搜索（🔍 角标 + 顶部抽屉面板 → 写入 NMP 播放器 song-id） ---------------------- */
+/* ---------------------- 音乐搜索（抽屉式：薄壳内搜索 → 写入 NMP 播放器 song-id） ---------------------- */
 (function () {
-  const search  = document.getElementById("musicSearch");
+  const dock    = document.getElementById("musicSearch");
   const toggle  = document.getElementById("msToggle");
-  const panel   = document.getElementById("msPanel");
   const input   = document.getElementById("msInput");
+  const clear   = document.getElementById("msClear");
   const results = document.getElementById("msResults");
   const status  = document.getElementById("msStatus");
-  const closeBtn = document.getElementById("msClose");
-  if (!search || !toggle || !panel || !input || !results) return;
+  if (!dock || !toggle || !input || !results) return;
 
   const API = "https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php";
-  let debounce, player = null, reqId = 0;
+  let debounce, reqId = 0;
 
-  const getPlayer = () => (player ||= document.querySelector("nmp-player"));
+  const getPlayer = () => document.querySelector("nmp-player");
   const esc = (s) => String(s).replace(/[&<>\"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const fmtDur = (ms) => {
@@ -630,20 +629,32 @@ if (document.readyState !== "loading") router();
     return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
   };
 
-  /* 打开 / 关闭抽屉面板 */
-  const openPanel = () => { panel.hidden = false; setTimeout(() => input.focus(), 30); };
-  const closePanel = () => {
-    panel.hidden = true;
-    input.value = ""; results.innerHTML = ""; results.hidden = true; status.textContent = "";
-  };
+  /* 抽屉开合 */
+  function openDrawer() {
+    dock.classList.add("open");
+    toggle.setAttribute("aria-expanded", "true");
+    setTimeout(() => input.focus(), 320);
+  }
+  function closeDrawer() {
+    dock.classList.remove("open");
+    toggle.setAttribute("aria-expanded", "false");
+    input.value = ""; if (clear) clear.hidden = true;
+    results.innerHTML = ""; results.hidden = true; status.textContent = "";
+  }
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dock.classList.contains("open") ? closeDrawer() : openDrawer();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && dock.classList.contains("open")) closeDrawer();
+  });
+  document.addEventListener("click", (e) => {
+    if (dock.classList.contains("open") && !dock.contains(e.target)) closeDrawer();
+  });
 
-  toggle.addEventListener("click", (e) => { e.stopPropagation(); panel.hidden ? openPanel() : closePanel(); });
-  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
-  document.addEventListener("click", (e) => { if (!panel.hidden && !search.contains(e.target)) closePanel(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) closePanel(); });
-
-  /* 输入防抖搜索 */
+  /* 输入搜索（防抖） */
   input.addEventListener("input", () => {
+    if (clear) clear.hidden = !input.value;
     clearTimeout(debounce);
     const q = input.value.trim();
     if (!q) { results.innerHTML = ""; results.hidden = true; status.textContent = ""; return; }
@@ -702,39 +713,14 @@ if (document.readyState !== "loading") router();
       p.setAttribute("song-id", li.dataset.id);
       tryPlay(p, 3); // 等歌曲加载完成后尝试自动播放（多次兜底 API 延迟）
     }
-    closePanel();
+    closeDrawer();
+  });
+
+  if (clear) clear.addEventListener("click", () => {
+    input.value = ""; clear.hidden = true;
+    results.hidden = true; results.innerHTML = ""; status.textContent = "";
+    input.focus();
   });
 })();
 
-/* ---------------------- 搜索控件吸附到播放器（页面级定位，覆盖在播放器之上） ---------------------- */
-(function () {
-  const player = document.querySelector("nmp-player");
-  const dock = document.getElementById("musicSearch");
-  if (!player || !dock) return;
-
-  /* 测量播放器实际尺寸，把 .music-dock 覆盖在其上，使 🔍 角标与抽屉面板对齐播放器 */
-  function bindSearchToPlayer() {
-    const r = player.getBoundingClientRect();
-    if (!r.width || !r.height) return; // 播放器尚未渲染完
-    dock.style.top = r.top + "px";
-    dock.style.left = r.left + "px";
-    dock.style.width = r.width + "px";
-    dock.style.height = r.height + "px";
-  }
-
-  // 播放器异步渲染：轮询直到有尺寸，然后停止
-  let tries = 0;
-  const iv = setInterval(() => {
-    if (player.getBoundingClientRect().width) {
-      bindSearchToPlayer();
-      clearInterval(iv);
-    } else if (++tries > 50) clearInterval(iv);
-  }, 100);
-
-  // 窗口缩放 / 播放器位置或样式变化（含拖拽）时重绑
-  window.addEventListener("resize", bindSearchToPlayer);
-  if (player.getBoundingClientRect().width) bindSearchToPlayer();
-  try {
-    new MutationObserver(bindSearchToPlayer).observe(player, { attributes: true });
-  } catch (_) {}
-})();
+/* （已移除 bindSearchToPlayer：播放器改为嵌入 .music-dock 容器，纯 CSS 固定左下角，无需 JS 测量定位） */

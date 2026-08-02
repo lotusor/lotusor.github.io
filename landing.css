@@ -13,6 +13,12 @@
   --dark-text: #b8c4d8;
   --dark-text-bright: #dde8ff;
   --dark-text-dim: #5a6a88;
+
+  /* 音乐抽屉尺寸 token */
+  --ms-peek: 44px;                                  /* 收起时露出的薄边宽度 */
+  --ms-open: 170px;                                 /* 展开时薄壳额外向右伸出 ≈ +50% */
+  --ms-t: 420ms;
+  --ms-ease: cubic-bezier(.22, 1, .36, 1);
 }
 
 /* 覆盖 styles.css 的白色 body 背景，全站深色基底 */
@@ -562,107 +568,165 @@ body.on-blog .blog-head { padding-top: 72px; }
   border-radius: 6px;
 }
 
-/* ==================== 音乐控件（播放器页面级 + 🔍 角标抽屉搜索） ==================== */
-/* 播放器为 NMP 原生页面级定位（position=bottom-right，可在 HTML 改任意角、可拖拽） */
-/* .music-dock 由 JS 测量播放器位置后覆盖在其上，承载 🔍 角标与顶部抽屉面板 */
+/* ==================== 音乐控件（歌单播放器 + 内嵌搜索，固定左下角） ==================== */
 
+/* ================= 音乐控件：播放器 + 抽屉式搜索 ================= */
 .music-dock {
   position: fixed;
+  left: 22px;
+  bottom: 22px;
   z-index: 45;
-  /* top / left / width / height 由 JS 设为播放器实际尺寸 */
-  pointer-events: none;   /* 透传点击到播放器，仅子元素可交互 */
-}
-.music-dock .ms-toggle,
-.music-dock .ms-panel { pointer-events: auto; }
-
-/* 🔍 角标：附着于播放器右上角 */
-.ms-toggle {
-  position: absolute;
-  top: -14px; right: -14px;
-  width: 38px; height: 38px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--dark-text-bright);
-  cursor: pointer;
-  background: rgba(14, 22, 42, .7);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(70, 110, 220, .3);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .4);
-  z-index: 2;
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-}
-.ms-toggle:hover {
-  transform: scale(1.1);
-  border-color: rgba(90, 130, 255, .6);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, .5);
+  width: max-content;       /* 收缩到播放器实际宽度 */
+  overflow: visible;        /* 允许抽屉向右溢出、结果浮层向上展开 */
 }
 
-/* 抽屉面板：从播放器顶部弹出（向上展开） */
-.ms-panel {
+/* 歌单播放器嵌入容器内（position=static），取消 NMP 自身 fixed 定位；
+   player-wrap 负责把播放器抬到薄壳之上 */
+.music-dock nmp-player { position: static !important; }
+.music-dock .nmpv3-player { position: static !important; }
+.music-dock .player-wrap { position: relative; z-index: 3; }
+
+/* ---------- 搜索薄壳（抽屉本体，位于播放器下层） ---------- */
+.music-dock .ms-shell {
   position: absolute;
-  bottom: calc(100% + 14px);   /* 在播放器上方 */
-  right: 0;
-  width: 320px; max-width: 84vw;
+  left: 0; top: 0;
+  height: 100%;
+  width: calc(100% + var(--ms-peek));       /* 收起：露出一条薄边 */
+  z-index: 1;
   border-radius: 16px;
-  padding: 12px;
-  background: rgba(10, 16, 30, .72);
-  border: 1px solid rgba(70, 110, 220, .22);
-  box-shadow: 0 12px 44px rgba(0, 0, 0, .5);
-  display: flex; flex-direction: column;
-  max-height: 62vh;
-  animation: msPop .22s ease;
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
+  background: var(--dark-surface);
+  border: 1px solid var(--dark-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .5);
+  overflow: visible;                        /* 不裁切向上展开的结果浮层 */
+  backdrop-filter: blur(14px);
+  transition: width var(--ms-t) var(--ms-ease),
+              box-shadow var(--ms-t) var(--ms-ease);
 }
-@keyframes msPop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.music-dock.open .ms-shell {
+  width: calc(100% + var(--ms-open));        /* 抽出：向右多出 ~50% */
+  box-shadow: 0 10px 50px rgba(0, 0, 0, .6),
+              6px 0 24px -6px rgba(90, 130, 255, .35);
+}
 
-.ms-input-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, .05);
-  border: 1px solid rgba(120, 150, 220, .16);
+/* 薄壳内：搜索面板（落在薄壳右段，随薄壳右缘被拉出） */
+.music-dock .ms-panel {
+  position: absolute;
+  left: calc(100% - var(--ms-open));         /* 紧贴播放器右侧、薄壳右段起点 */
+  top: 0; bottom: 0;
+  width: calc(var(--ms-open) - 46px);        /* 给右侧拉手留出 46px 间隙 */
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-left: 1px solid var(--dark-border);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease .08s;
 }
-.ms-search-icon { color: var(--dark-text-dim); flex-shrink: 0; }
-.ms-input {
+.music-dock.open .ms-panel { opacity: 1; pointer-events: auto; }
+
+.music-dock .ms-field {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 6px 8px;
+  transition: border-color .2s ease, background .2s ease;
+}
+.music-dock .ms-field:focus-within {
+  border-color: rgba(120, 150, 220, .45);
+  background: rgba(255, 255, 255, .09);
+}
+.music-dock .ms-search-icon { color: var(--dark-text-dim); flex-shrink: 0; }
+.music-dock .ms-input {
   flex: 1; min-width: 0;
   background: transparent; border: none; outline: none;
-  color: var(--dark-text-bright); font-size: 14px;
+  color: var(--dark-text-bright); font-size: 12.5px;
 }
-.ms-input::placeholder { color: var(--dark-text-dim); }
-.ms-input::-webkit-search-cancel-button { -webkit-appearance: none; }
-.ms-close {
+.music-dock .ms-input::placeholder { color: var(--dark-text-dim); font-size: 12px; }
+.music-dock .ms-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.music-dock .ms-clear {
   background: none; border: none; cursor: pointer;
-  color: var(--dark-text-dim); font-size: 14px;
-  padding: 2px 5px; border-radius: 6px;
+  color: var(--dark-text-dim); font-size: 12px; line-height: 1;
+  padding: 2px 3px; border-radius: 6px; flex-shrink: 0;
 }
-.ms-close:hover { color: var(--dark-text-bright); background: rgba(255, 255, 255, .06); }
+.music-dock .ms-clear:hover { color: var(--dark-text-bright); background: rgba(255, 255, 255, .06); }
 
-.ms-results {
-  list-style: none; margin: 10px 0 0; padding: 0 2px;
-  overflow-y: auto; max-height: 44vh;
-  display: flex; flex-direction: column; gap: 4px;
+/* 搜索结果浮层（向上弹出，避开贴底溢出） */
+.music-dock .ms-results {
+  list-style: none; margin: 5px 0 0; padding: 8px;
+  position: absolute;
+  bottom: calc(100% + 8px);   /* 向上展开 */
+  right: 0;
+  width: 300px; max-width: 70vw;
+  border-radius: 12px;
+  background: var(--dark-surface);
+  border: 1px solid var(--dark-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(14px);
+  overflow-y: auto; max-height: 42vh;
+  display: flex; flex-direction: column; gap: 3px;
+  animation: msPop .2s ease;
 }
-.ms-results::-webkit-scrollbar { width: 6px; }
-.ms-results::-webkit-scrollbar-thumb { background: rgba(120, 150, 220, .3); border-radius: 3px; }
-.ms-result {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px; border-radius: 10px;
+.music-dock .ms-results::-webkit-scrollbar { width: 5px; }
+.music-dock .ms-results::-webkit-scrollbar-thumb { background: rgba(120, 150, 220, .3); border-radius: 3px; }
+@keyframes msPop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+
+.music-dock .ms-result {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 9px;
   cursor: pointer; transition: background .15s ease;
 }
-.ms-result:hover { background: rgba(90, 130, 255, .14); }
-.ms-cover {
-  width: 38px; height: 38px; border-radius: 8px; flex-shrink: 0;
+.music-dock .ms-result:hover { background: rgba(90, 130, 255, .14); }
+.music-dock .ms-cover {
+  width: 34px; height: 34px; border-radius: 7px; flex-shrink: 0;
   background: rgba(255, 255, 255, .06) center / cover no-repeat;
   display: flex; align-items: center; justify-content: center;
-  color: var(--dark-text-dim); font-size: 16px;
+  color: var(--dark-text-dim); font-size: 14px;
 }
-.ms-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.ms-name { color: var(--dark-text-bright); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ms-artist { color: var(--dark-text-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ms-dur { color: var(--dark-text-dim); font-size: 11.5px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.ms-status { color: var(--dark-text-dim); font-size: 12.5px; padding: 8px 4px 2px; text-align: center; }
+.music-dock .ms-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.music-dock .ms-name { color: var(--dark-text-bright); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music-dock .ms-artist { color: var(--dark-text-dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music-dock .ms-dur { color: var(--dark-text-dim); font-size: 11px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.music-dock .ms-status { color: var(--dark-text-dim); font-size: 11.5px; padding: 4px 2px 0; text-align: right; white-space: nowrap; }
+
+/* ---------- 搜索触发图标（落在薄边上的抽屉拉手） ---------- */
+.music-dock .ms-toggle {
+  position: absolute;
+  top: 10px;
+  left: calc(100% + 4px);                     /* 收起：贴在露出的薄边上 */
+  z-index: 4;
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid rgba(120, 150, 220, .45);
+  background: var(--dark-surface);
+  color: var(--dark-text-bright);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+  transition: left var(--ms-t) var(--ms-ease),
+              transform .25s var(--ms-ease),
+              background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.music-dock .ms-toggle:hover { background: rgba(20, 30, 52, .95); }
+.music-dock .ms-toggle:focus-visible { outline: 2px solid rgba(120, 150, 220, .9); outline-offset: 2px; }
+.music-dock:not(.open) .ms-toggle { animation: msHint 2.6s ease-in-out infinite; }
+.music-dock.open .ms-toggle {
+  left: calc(100% + var(--ms-open) - 42px);   /* 展开：随薄壳移到最右缘 */
+  transform: rotate(90deg); color: #fff;
+  box-shadow: 0 4px 20px rgba(90, 130, 255, .6);
+  animation: none;
+}
+@keyframes msHint {
+  0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, .4); }
+  50%      { box-shadow: 0 4px 22px rgba(90, 130, 255, .6); }
+}
+
+/* 尊重「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .music-dock .ms-shell,
+  .music-dock .ms-toggle,
+  .music-dock .ms-panel,
+  .music-dock .ms-results { transition: none !important; animation: none !important; }
+}
 
 /* ==================== 响应式 ==================== */
 @media (max-width: 680px) {
@@ -680,6 +744,7 @@ body.on-blog .blog-head { padding-top: 72px; }
   body.on-blog #app { padding: 0 16px; }
   .friend-sites { margin-top: 28px; }
   .friend-card { padding: 8px 16px; font-size: 13px; }
-  .ms-panel { width: 280px; }
-  .ms-toggle { width: 34px; height: 34px; top: -12px; right: -12px; }
+  .music-dock { left: 14px; bottom: 14px; --ms-open: 150px; }
+  .music-dock.open .ms-shell { width: min(calc(100% + var(--ms-open)), calc(100vw - 28px)); }
+  .music-dock .ms-panel { width: min(calc(var(--ms-open) - 46px), calc(100vw - 28px - 100%)); }
 }
