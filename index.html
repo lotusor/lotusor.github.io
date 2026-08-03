@@ -39,7 +39,7 @@
 
   <!-- 音乐播放器（页面级定位：position 可改为 bottom-left / bottom-right / top-left / top-right） -->
   <nmp-player
-    playlist-id="3778678"
+    song-id="1973665667"
     api-base-url="https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php"
     theme="dark"
     layout="dock"
@@ -59,6 +59,22 @@
       <ul class="ms-results" id="msResults" hidden></ul>
       <div class="ms-status" id="msStatus"></div>
     </div>
+  </div>
+
+  <!-- 历史点播记录（本地保存，最多 20 首；点击切歌自动播放） -->
+  <div class="history-dock" id="historyDock">
+    <div class="history-panel" id="historyPanel" hidden>
+      <div class="history-head">
+        <span>历史点播记录</span>
+        <button class="history-clear" id="historyClear" type="button">清空</button>
+      </div>
+      <ul class="history-list" id="historyList" aria-label="历史点播记录列表"></ul>
+      <p class="history-empty" id="historyEmpty" hidden>还没有点播记录，搜一首歌试试～</p>
+    </div>
+    <button class="history-toggle" id="historyToggle" type="button" aria-expanded="false" aria-controls="historyPanel">
+      <svg class="hi-clock" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm.5-13H11v6l5 3 .75-1.23-4.25-2.52V7Z"/></svg>
+      历史 <span class="history-count" id="historyCount">0</span>
+    </button>
   </div>
 
   <!-- Markdown 解析与代码高亮（CDN） -->

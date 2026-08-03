@@ -699,8 +699,8 @@ if (document.readyState !== "loading") router();
         const arts = (s.artists || s.ar || []).map(a => a.name).join("/") || "未知歌手";
         const cover = coverMap[s.id] || "";
         const dur = fmtDur(s.duration || s.dt);
-        return `<li class="ms-result" data-id="${s.id}">
-          <span class="ms-cover" ${cover ? `style="background-image:url('${cover}')"` : ""}>♪</span>
+        return `<li class="ms-result" data-id="${s.id}" data-name="${escAttr(s.name)}" data-artist="${escAttr(arts)}" data-cover="${escAttr(cover)}">
+          <span class="ms-cover" ${cover ? `style="background-image:url('${escAttr(cover)}')"` : ""}>♪</span>
           <span class="ms-meta">
             <span class="ms-name">${esc(s.name)}</span>
             <span class="ms-artist">${esc(arts)}</span>
@@ -716,19 +716,11 @@ if (document.readyState !== "loading") router();
     }
   }
 
-  /* 点结果 → 切歌 */
-  function tryPlay(p, times) {
-    if (!times) return;
-    setTimeout(() => { try { p.play && p.play(); } catch (_) {}; tryPlay(p, times - 1); }, 900);
-  }
+  /* 点结果 → 切歌（自动播放 + 记入历史点播记录） */
   results.addEventListener("click", (e) => {
     const li = e.target.closest(".ms-result");
     if (!li) return;
-    const p = getPlayer();
-    if (p) {
-      p.setAttribute("song-id", li.dataset.id);
-      tryPlay(p, 3); // 等歌曲加载完成后尝试自动播放（多次兜底 API 延迟）
-    }
+    playSong({ id: li.dataset.id, name: li.dataset.name, artist: li.dataset.artist, cover: li.dataset.cover });
     collapse();
   });
 })();
@@ -770,4 +762,127 @@ if (document.readyState !== "loading") router();
   try {
     new MutationObserver(bindSearchToPlayer).observe(player, { attributes: true });
   } catch (_) {}
+})();
+
+/* ---------------------- 历史点播记录（本地保存，最多 20 首） ----------------------
+   说明：NMP v3 是黑盒 Web Component，只能接受 song-id / playlist-id（服务端歌单），
+   无法把本地数组当歌单。因此「歌单 = 历史点播记录」由我们自己的面板实现：
+   面板点击 → 写入播放器 song-id → 自动播放，并把歌曲记入 localStorage。 */
+const HISTORY_KEY = "lotusor-play-history";
+const HISTORY_MAX = 20;
+let _currentSongId = null;
+
+function getPlayerEl() { return document.querySelector("nmp-player"); }
+
+function loadHistory() {
+  try { const v = JSON.parse(localStorage.getItem(HISTORY_KEY)); return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+}
+function saveHistory(list) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); } catch (_) {}
+}
+
+/* 共享：播放一首歌 —— 写回 song-id + 重试自动播放 + 记入历史（去重置顶、限 20） */
+function playSong(song) {
+  if (!song || !song.id) return;
+  const p = getPlayerEl();
+  if (!p) return;
+  p.setAttribute("song-id", song.id);
+  _currentSongId = String(song.id);
+  // NMP 切换歌曲需一点加载时间，多次重试 play() 兜底浏览器/接口延迟
+  let n = 3;
+  (function attempt() {
+    if (!n--) return;
+    setTimeout(() => { try { p.play && p.play(); } catch (_) {} attempt(); }, 900);
+  })();
+  // 记入历史
+  const list = loadHistory().filter(s => String(s.id) !== String(song.id));
+  list.unshift({
+    id: song.id,
+    name: song.name || "未知歌曲",
+    artist: song.artist || "未知歌手",
+    cover: song.cover || "",
+    ts: Date.now()
+  });
+  if (list.length > HISTORY_MAX) list.length = HISTORY_MAX;
+  saveHistory(list);
+  renderHistory();
+}
+
+function escAttr(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* 渲染历史列表 + 高亮当前播放 */
+function renderHistory() {
+  const panel = document.getElementById("historyPanel");
+  const listEl = document.getElementById("historyList");
+  const emptyEl = document.getElementById("historyEmpty");
+  const countEl = document.getElementById("historyCount");
+  if (!listEl) return;
+  const list = loadHistory();
+  if (countEl) countEl.textContent = String(list.length);
+  if (!list.length) {
+    listEl.innerHTML = "";
+    if (emptyEl) emptyEl.hidden = false;
+    return;
+  }
+  if (emptyEl) emptyEl.hidden = true;
+  listEl.innerHTML = list.map(s => `
+    <li>
+      <button class="history-item ${String(s.id) === _currentSongId ? "is-playing" : ""}" type="button"
+              data-id="${escAttr(s.id)}" data-name="${escAttr(s.name)}" data-artist="${escAttr(s.artist)}" data-cover="${escAttr(s.cover)}"
+              aria-label="播放 ${escAttr(s.name)} - ${escAttr(s.artist)}">
+        <span class="history-cover" ${s.cover ? `style="background-image:url('${escAttr(s.cover)}')"` : ""}>♪</span>
+        <span class="history-meta">
+          <span class="history-name">${escHtml(s.name)}</span>
+          <span class="history-artist">${escHtml(s.artist)}</span>
+        </span>
+        <svg class="hi-play" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+      </button>
+    </li>`).join("");
+}
+
+/* 历史面板交互：展开/收起、点击切歌自动播放、清空 */
+(function () {
+  const dock = document.getElementById("historyDock");
+  const toggle = document.getElementById("historyToggle");
+  const panel = document.getElementById("historyPanel");
+  const listEl = document.getElementById("historyList");
+  const clearBtn = document.getElementById("historyClear");
+  if (!dock || !toggle || !panel || !listEl) return;
+
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  toggle.addEventListener("click", () => setOpen(panel.hidden));
+  document.addEventListener("click", (e) => {
+    if (!panel.hidden && !dock.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !panel.hidden) setOpen(false);
+  });
+
+  listEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".history-item");
+    if (!btn) return;
+    playSong({ id: btn.dataset.id, name: btn.dataset.name, artist: btn.dataset.artist, cover: btn.dataset.cover });
+    setOpen(false);
+  });
+
+  if (clearBtn) clearBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    saveHistory([]);
+    _currentSongId = null;
+    renderHistory();
+  });
+
+  renderHistory(); // 首次渲染（读取本地历史）
 })();
