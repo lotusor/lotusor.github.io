@@ -564,12 +564,12 @@ body.on-blog .blog-head { padding-top: 72px; }
 
 /* ==================== 音乐控件（播放器页面级 + 内联搜索） ==================== */
 /* 播放器恢复 NMP 原生页面级定位（position=bottom-right，可在 HTML 改任意角） */
-/* .music-dock 仅承载内联搜索栏，固定在左 1/4 处（左边缘↔居中 MY-THINK 按钮的中点），垂直高度不变 */
+/* .music-dock 仅承载内联搜索栏，固定在左 1/4 处（左边缘↔居中 MY-THINK 按钮的中点），垂直回到默认 */
 
 .music-dock {
   position: fixed;
   left: 25vw;
-  bottom: 72px;
+  bottom: 22px;
   z-index: 45;
   display: flex;
   align-items: flex-end;
@@ -788,7 +788,7 @@ body.on-blog .blog-head { padding-top: 72px; }
   body.on-blog #app { padding: 0 16px; }
   .friend-sites { margin-top: 28px; }
   .friend-card { padding: 8px 16px; font-size: 13px; }
-  .music-dock { left: 25vw; bottom: 56px; }
+  .music-dock { left: 25vw; bottom: 14px; }
   .ms-inline-input-wrap.ms-active { width: 150px; }
   .ms-inline .ms-results { width: 220px; }
   .history-dock { right: 14px; bottom: 80px; }
