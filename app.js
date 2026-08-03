@@ -745,45 +745,6 @@ if (document.readyState !== "loading") router();
   });
 })();
 
-/* ---------------------- 搜索栏吸附到播放器（页面级定位，跟随播放器位置） ---------------------- */
-(function () {
-  const player = document.querySelector("nmp-player");
-  const dock = document.getElementById("musicSearch");
-  if (!player || !dock) return;
-
-  /* 测量播放器实际位置，把搜索栏吸附到它旁边（同侧贴边，展开时不遮挡播放器） */
-  function bindSearchToPlayer() {
-    const r = player.getBoundingClientRect();
-    if (!r.width || !r.height) return; // 播放器尚未渲染完
-    const gap = 12;
-    const vw = window.innerWidth, vh = window.innerHeight;
-    // 重置所有定位，避免脏值
-    dock.style.left = dock.style.right = dock.style.top = dock.style.bottom = "auto";
-    const onRight = r.left > vw / 2;   // 播放器在右半屏 → 搜索栏贴其左侧
-    const onBottom = r.top > vh / 2;   // 播放器在底部 → 底部对齐
-    if (onRight) { dock.style.right = (vw - r.left + gap) + "px"; }
-    else         { dock.style.left  = (r.right + gap) + "px"; }
-    if (onBottom) { dock.style.bottom = (vh - r.bottom) + "px"; }
-    else          { dock.style.top    = r.top + "px"; }
-  }
-
-  // 播放器异步渲染：轮询直到有尺寸，然后停止
-  let tries = 0;
-  const iv = setInterval(() => {
-    if (player.getBoundingClientRect().width) {
-      bindSearchToPlayer();
-      clearInterval(iv);
-    } else if (++tries > 50) clearInterval(iv);
-  }, 100);
-
-  // 窗口缩放 / 播放器位置或样式变化（含拖拽）时重绑
-  window.addEventListener("resize", bindSearchToPlayer);
-  if (player.getBoundingClientRect().width) bindSearchToPlayer();
-  try {
-    new MutationObserver(bindSearchToPlayer).observe(player, { attributes: true });
-  } catch (_) {}
-})();
-
 /* ---------------------- 历史点播记录（本地保存，最多 20 首） ----------------------
    说明：NMP v3 是黑盒 Web Component，只能接受 song-id / playlist-id（服务端歌单），
    无法把本地数组当歌单。因此「歌单 = 历史点播记录」由我们自己的面板实现：
