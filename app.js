@@ -335,16 +335,18 @@ function allTags() {
 }
 
 function tagLink(tag) {
-  return `<a class="tag" href="#/tag/${encodeURIComponent(tag)}">${tag}</a>`;
+  return `<a class="tag" href="#/tag/${encodeURIComponent(tag)}">${escHtml(tag)}</a>`;
 }
 
-/* ---------------------- Markdown 渲染 ---------------------- */
+/* ---------------------- Markdown 渲染（marked + DOMPurify 净化） ---------------------- */
 function renderMarkdown(md) {
   if (typeof marked === "undefined") {
     return `<p class="empty">Markdown 解析库未能加载（请检查网络后刷新）。</p>`;
   }
   marked.setOptions({ gfm: true, breaks: true });
-  return marked.parse(md);
+  const html = marked.parse(md);
+  // marked v5+ 已移除 sanitize 选项，原始 HTML 会放行；接 DOMPurify 兜底防存储 XSS
+  return (typeof DOMPurify !== "undefined") ? DOMPurify.sanitize(html) : html;
 }
 
 function highlightWithin(root) {
@@ -355,6 +357,24 @@ function highlightWithin(root) {
 }
 
 /* ---------------------- 视图 ---------------------- */
+
+/* 图片加载失败兜底：委托监听 error（capture 阶段捕获不冒泡的 error 事件），
+   替代模板中的内联 onerror，从而允许严格 CSP（script-src 无 'unsafe-inline'） */
+const FALLBACK_SVG = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%238899bb%22><text y=%2218%22 font-size=%2216%22>Q</text></svg>";
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (!img || img.tagName !== "IMG") return;
+  const mode = img.dataset && img.dataset.fallback;
+  if (!mode || img.dataset.fbDone) return;
+  img.dataset.fbDone = "1";
+  if (mode === "svg") {
+    img.src = FALLBACK_SVG;
+  } else if (mode === "hide") {
+    img.style.display = "none";
+    const sib = img.nextElementSibling;
+    if (sib) sib.style.display = "grid";
+  }
+}, true);
 /* ---------------------- 社交链接（封面用） ---------------------- */
 const SOCIALS = [
   { name: "Bilibili", url: "https://space.bilibili.com/1806826320?spm_id_from=333.1007.0.0", icon: "https://www.bilibili.com/favicon.ico" },
@@ -369,20 +389,18 @@ const FRIENDS = [
 
 function friendLink(f) {
   return `
-    <a class="friend-card glass" href="${f.url}" target="_blank" rel="noopener" title="${f.name}" aria-label="友站：${f.name}">
-      <img src="${f.icon}" alt="${f.name}" loading="lazy"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" />
-      <span class="friend-fallback">${f.name.charAt(0).toUpperCase()}</span>
-      <span>${f.name}</span>
+    <a class="friend-card glass" href="${escAttr(f.url)}" target="_blank" rel="noopener" title="${escAttr(f.name)}" aria-label="友站：${escAttr(f.name)}">
+      <img src="${escAttr(f.icon)}" alt="${escAttr(f.name)}" loading="lazy" data-fallback="hide" />
+      <span class="friend-fallback">${escHtml(f.name.charAt(0).toUpperCase())}</span>
+      <span>${escHtml(f.name)}</span>
     </a>`;
 }
 
 function socialLink(s) {
   return `
-    <a class="social glass" href="${s.url}" target="_blank" rel="noopener" title="${s.name}" aria-label="${s.name}">
-      <img src="${s.icon}" alt="${s.name}" loading="lazy"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" />
-      <span class="social-fallback">${s.name.charAt(0)}</span>
+    <a class="social glass" href="${escAttr(s.url)}" target="_blank" rel="noopener" title="${escAttr(s.name)}" aria-label="${escAttr(s.name)}">
+      <img src="${escAttr(s.icon)}" alt="${escAttr(s.name)}" loading="lazy" data-fallback="hide" />
+      <span class="social-fallback">${escHtml(s.name.charAt(0))}</span>
     </a>`;
 }
 
@@ -401,8 +419,7 @@ function viewLanding() {
         ${socials}
         <div class="qq-wrap">
           <div class="qq-icon-btn glass" title="QQ 二维码" aria-label="QQ 二维码">
-            <img src="https://im.qq.com/favicon.ico" alt="QQ" loading="lazy"
-                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%238899bb%22><text y=%2218%22 font-size=%2216%22>Q</text></svg>'" />
+            <img src="https://im.qq.com/favicon.ico" alt="QQ" loading="lazy" data-fallback="svg" />
           </div>
           <div class="qq-qr-panel">
             <img src="assets/qq-qr.png" alt="QQ 二维码" />
@@ -440,12 +457,12 @@ function viewBlog() {
 function postCard(p) {
   return `
     <article class="post-card">
-      <h2><a href="#/post/${p.id}">${p.title}</a></h2>
+      <h2><a href="#/post/${p.id}">${escHtml(p.title)}</a></h2>
       <div class="post-meta">
-        <span>📅 ${p.date}</span>
-        <span>🏷 ${p.tags.join(" · ")}</span>
+        <span>📅 ${escHtml(p.date)}</span>
+        <span>🏷 ${p.tags.map(escHtml).join(" · ")}</span>
       </div>
-      <p class="post-excerpt">${p.excerpt}</p>
+      <p class="post-excerpt">${escHtml(p.excerpt)}</p>
       <div class="tag-row">${p.tags.map(t => tagLink(t)).join("")}</div>
     </article>
   `;
@@ -458,10 +475,10 @@ function viewPost(id) {
     <article class="article">
       <a class="back-link" href="#/">← 返回文章列表</a>
       <header class="article-header">
-        <h1>${p.title}</h1>
+        <h1>${escHtml(p.title)}</h1>
         <div class="post-meta">
-          <span>📅 ${p.date}</span>
-          <span>🏷 ${p.tags.join(" · ")}</span>
+          <span>📅 ${escHtml(p.date)}</span>
+          <span>🏷 ${p.tags.map(escHtml).join(" · ")}</span>
         </div>
       </header>
       <div class="article-body">${renderMarkdown(p.content)}</div>
@@ -487,7 +504,7 @@ function viewTags() {
   $app.innerHTML = `
     <h2 class="section-title">全部标签 <span class="count">${tags.length} 个</span></h2>
     <div class="tag-cloud">
-      ${tags.map(([t, c]) => `<a class="tag" href="#/tag/${encodeURIComponent(t)}">${t}<span class="tag-count">${c}</span></a>`).join("")}
+      ${tags.map(([t, c]) => `<a class="tag" href="#/tag/${encodeURIComponent(t)}">${escHtml(t)}<span class="tag-count">${escHtml(String(c))}</span></a>`).join("")}
     </div>
   `;
 }
