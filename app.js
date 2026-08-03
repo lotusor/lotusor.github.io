@@ -476,7 +476,7 @@ function viewTag(tag) {
   const cards = posts.length ? posts.map(postCard).join("")
     : `<p class="empty">这个标签下还没有文章。</p>`;
   $app.innerHTML = `
-    <h2 class="section-title">标签：${decoded} <span class="count">${posts.length} 篇</span></h2>
+    <h2 class="section-title">标签：${escHtml(decoded)} <span class="count">${posts.length} 篇</span></h2>
     <a class="back-link" href="#/">← 返回首页</a>
     <div class="post-list">${cards}</div>
   `;
