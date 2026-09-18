@@ -794,3 +794,161 @@ body.on-blog .blog-head { padding-top: 72px; }
   .history-dock { right: 14px; bottom: 80px; }
   .history-panel { width: 244px; max-width: 84vw; }
 }
+
+/* ==================== 主题切换按钮（Header 右侧） ==================== */
+.theme-toggle {
+  margin-left: auto;            /* 贴右（品牌仍贴左） */
+  width: 34px; height: 34px;
+  display: inline-grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(14, 22, 42, .5);
+  border: 1px solid var(--dark-border);
+  color: var(--dark-text-bright);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  transition: background .2s ease, border-color .2s ease, transform .2s ease;
+}
+.theme-toggle:hover {
+  background: rgba(25, 38, 65, .72);
+  border-color: rgba(100, 140, 255, .45);
+  transform: translateY(-1px);
+}
+.theme-toggle:active { transform: translateY(0); }
+.theme-toggle .theme-icon { font-size: 15px; line-height: 1; }
+
+/* 主题切换时的一次性平滑过渡（克制：仅颜色，无循环动画） */
+html.theme-anim, html.theme-anim body,
+html.theme-anim .post-card, html.theme-anim .site-header,
+html.theme-anim .article-body pre, html.theme-anim .article-body code {
+  transition: background-color .28s ease, color .28s ease, border-color .28s ease;
+}
+
+/* ==================== 音乐抽屉（播放器 + 搜索 + 历史 统一悬浮组件） ==================== */
+.music-drawer {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+}
+
+/* 收起态 ↔ 展开态 */
+#musicDrawer[data-collapsed="true"] .drawer-body { display: none; }
+#musicDrawer[data-collapsed="false"] .music-launcher { display: none; }
+
+/* 悬浮圆形按钮（收起时可见） */
+.music-launcher {
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(14, 22, 42, .72);
+  border: 1px solid rgba(70, 110, 220, .28);
+  color: var(--dark-text-bright);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  transition: transform .2s ease, background .2s ease, border-color .2s ease;
+}
+.music-launcher:hover { transform: translateY(-3px) scale(1.05); background: rgba(25, 38, 65, .85); border-color: rgba(120, 150, 220, .45); }
+
+/* 抽屉主体玻璃面板 */
+.drawer-body {
+  border-radius: 16px;
+  background: rgba(10, 16, 30, .86);
+  border: 1px solid rgba(70, 110, 220, .22);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, .5);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  overflow: hidden;
+  color: var(--dark-text);
+}
+#musicDrawer.is-dragging .drawer-body { user-select: none; }
+
+/* 拖拽把手 */
+.drawer-handle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  cursor: grab;
+  touch-action: none;
+  background: rgba(255, 255, 255, .03);
+  border-bottom: 1px solid rgba(70, 110, 220, .14);
+}
+.drawer-handle:active { cursor: grabbing; }
+.drawer-grip { color: var(--dark-text-dim); font-size: 13px; letter-spacing: -1px; }
+.drawer-label { font-size: 12.5px; font-weight: 600; color: var(--dark-text-bright); letter-spacing: .5px; }
+.drawer-collapse {
+  margin-left: auto;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: none; border-radius: 8px;
+  background: transparent; color: var(--dark-text-dim);
+  font-size: 14px; cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.drawer-collapse:hover { background: rgba(255, 255, 255, .07); color: var(--dark-text-bright); }
+
+/* 选项卡 */
+.drawer-tabs {
+  display: flex; gap: 4px;
+  padding: 8px 8px 0;
+}
+.dtab {
+  flex: 1;
+  appearance: none; border: none; cursor: pointer;
+  padding: 8px 6px;
+  border-radius: 9px 9px 0 0;
+  background: transparent;
+  color: var(--dark-text-dim);
+  font-size: 13px; font-weight: 500;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border-bottom: 2px solid transparent;
+  transition: color .18s ease, background .18s ease, border-color .18s ease;
+}
+.dtab:hover { color: var(--dark-text-bright); background: rgba(255, 255, 255, .04); }
+.dtab.is-active { color: var(--dark-text-bright); border-bottom-color: #6a9cff; background: rgba(70, 110, 220, .1); }
+.dtab .history-count {
+  min-width: 17px; height: 17px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; font-size: 10.5px;
+  background: rgba(90, 130, 255, .22); color: var(--dark-text-bright);
+}
+
+/* 面板容器 */
+.drawer-panels { padding: 12px; max-height: 52vh; overflow-y: auto; }
+.drawer-panels::-webkit-scrollbar { width: 5px; }
+.drawer-panels::-webkit-scrollbar-thumb { background: rgba(120, 150, 220, .3); border-radius: 3px; }
+.dpanel { display: none; }
+.dpanel.is-active { display: block; animation: msPop .2s ease; }
+
+/* 播放 Tab：内嵌播放器铺满 */
+#musicDrawer .dpanel[data-panel="play"] { display: none; }
+#musicDrawer .dpanel[data-panel="play"].is-active { display: block; }
+#musicDrawer nmp-player { display: block; width: 100%; }
+
+/* ---- 中和旧浮动件定位，令其作为抽屉内静态内容 ---- */
+#musicDrawer .music-dock { position: static; left: auto; bottom: auto; display: block; z-index: auto; }
+#musicDrawer .history-dock { position: static; right: auto; bottom: auto; display: block; gap: 0; align-items: stretch; }
+#musicDrawer .ms-inline { align-items: stretch; margin-left: 0; }
+#musicDrawer .ms-inline-input-wrap { width: auto; min-width: 0; }
+#musicDrawer .ms-input { width: 100%; opacity: 1; }
+#musicDrawer .ms-inline .ms-results {
+  position: static; right: auto; bottom: auto;
+  width: auto; max-width: none; margin-top: 8px;
+  background: rgba(255, 255, 255, .04);
+  box-shadow: none;
+}
+#musicDrawer .history-panel {
+  width: auto; max-width: none; max-height: none;
+  background: transparent; border: none; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  padding: 0; animation: none;
+}
+
+/* 响应式：小屏收窄 */
+@media (max-width: 680px) {
+  .music-drawer { width: 268px; right: 12px; bottom: 12px; }
+  .drawer-panels { max-height: 46vh; }
+}

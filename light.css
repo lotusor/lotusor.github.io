@@ -1,0 +1,147 @@
+/* =========================================================
+   light.css — 浅色主题覆盖层（叠加式，深色为默认零回归）
+   仅当 <html data-theme="light"> 时生效。
+   策略：
+     1) 重定义 landing.css 的 6 个 --dark-* 语义变量 → 浅色值，一次性翻转大量文本/表面/边框；
+     2) 对少数“硬编码深色 rgba / 蓝色 accent 字面量”做定向覆盖（封面玻璃、面板、代码块等）。
+   不改动深色规则本身，故深色外观与现状完全一致。
+   ========================================================= */
+
+/* ---------- 1) 语义变量翻转（浅色） ---------- */
+html[data-theme="light"] {
+  --dark-bg:          #eef2f8;              /* 全站基底色（浅） */
+  --dark-surface:     rgba(255, 255, 255, .82); /* 卡片/表面 */
+  --dark-border:      rgba(70, 110, 190, .16);
+  --dark-text:        #38445a;              /* 正文 */
+  --dark-text-bright: #0f1830;             /* 标题/强调文本 */
+  --dark-text-dim:    #7a8699;             /* 次要文本 */
+  /* 派生语义（供组件与后续复用） */
+  --panel-bg:         rgba(255, 255, 255, .9);
+  --panel-border:     rgba(70, 110, 200, .18);
+  --glass-bg:         rgba(255, 255, 255, .62);
+  --glass-bg-hover:   rgba(255, 255, 255, .82);
+  --accent-link:      #2f6fed;
+  --accent-tag-bg:    rgba(47, 111, 237, .1);
+  --accent-tag-fg:    #2f6fed;
+  --danger:           #d64550;
+}
+
+/* ---------- 基座背景 ---------- */
+html[data-theme="light"], html[data-theme="light"] body { background: var(--dark-bg); }
+html[data-theme="light"] body.on-blog { background: var(--dark-bg); color: var(--dark-text); }
+
+/* ---------- 封面 & 文章区 动态渐变背景（浅色版：柔和淡彩，避免深色光晕压不住） ---------- */
+html[data-theme="light"] .cover::before,
+html[data-theme="light"] body.on-blog::before {
+  background-color: #eaf0fb;
+  background-image:
+    radial-gradient(closest-side, rgba(70, 120, 255, .16), rgba(70, 120, 255, 0) 70%),
+    radial-gradient(closest-side, rgba(0, 180, 160, .13),  rgba(0, 180, 160, 0) 70%),
+    radial-gradient(closest-side, rgba(150, 90, 255, .11), rgba(150, 90, 255, 0) 70%),
+    radial-gradient(closest-side, rgba(0, 150, 220, .10),  rgba(0, 150, 220, 0) 70%);
+}
+html[data-theme="light"] .cover-grid {
+  background-image:
+    linear-gradient(rgba(40, 70, 130, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40, 70, 130, .05) 1px, transparent 1px);
+}
+html[data-theme="light"] .cover-quote { text-shadow: 0 1px 10px rgba(255, 255, 255, .6); }
+html[data-theme="light"] .cover-avatar {
+  box-shadow: 0 0 30px rgba(70, 120, 255, .16), 0 12px 34px rgba(30, 50, 90, .14);
+}
+
+/* ---------- 玻璃拟态表面（封面社交/按钮/二维码/友链） ---------- */
+html[data-theme="light"] .glass,
+html[data-theme="light"] .qq-icon-btn,
+html[data-theme="light"] .qq-qr-panel {
+  background: var(--glass-bg);
+  border-color: var(--panel-border);
+  box-shadow: 0 4px 18px rgba(30, 50, 90, .1);
+}
+html[data-theme="light"] .social:hover,
+html[data-theme="light"] .qq-wrap:hover .qq-icon-btn,
+html[data-theme="light"] .my-think:hover,
+html[data-theme="light"] .friend-card:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(47, 111, 237, .4);
+  box-shadow: 0 8px 24px rgba(47, 111, 237, .14), 0 4px 12px rgba(30, 50, 90, .1);
+}
+html[data-theme="light"] .social img,
+html[data-theme="light"] .qq-icon-btn img,
+html[data-theme="light"] .friend-card img { filter: none; }
+html[data-theme="light"] .my-think { color: var(--dark-text-bright); }
+
+/* ---------- 文章区 header（硬编码深色 → 浅色毛玻璃） ---------- */
+html[data-theme="light"] body.on-blog .site-header {
+  background: rgba(255, 255, 255, .82);
+  border-bottom-color: var(--dark-border);
+}
+html[data-theme="light"] body.on-blog .site-nav a.active,
+html[data-theme="light"] body.on-blog .site-nav a:hover {
+  color: var(--dark-text-bright);
+  border-bottom-color: var(--accent-link);
+}
+html[data-theme="light"] body.on-blog .site-nav a:hover { color: var(--accent-link); }
+
+/* ---------- 强调色字面量覆盖（蓝系 → 浅底可读的深蓝） ---------- */
+html[data-theme="light"] body.on-blog .post-card h2 a:hover { color: var(--accent-link); }
+html[data-theme="light"] body.on-blog .back-link:hover { color: var(--accent-link); }
+html[data-theme="light"] body.on-blog .tag { background: var(--accent-tag-bg); color: var(--accent-tag-fg); border-color: rgba(47, 111, 237, .18); }
+html[data-theme="light"] body.on-blog .tag:hover { background: rgba(47, 111, 237, .18); }
+html[data-theme="light"] body.on-blog .link-list a:hover { border-color: var(--accent-link); color: var(--accent-link); }
+html[data-theme="light"] body.on-blog .post-card:hover { box-shadow: 0 8px 28px rgba(30, 50, 90, .1); }
+
+/* ---------- 文章内容排版（浅底） ---------- */
+html[data-theme="light"] body.on-blog .article-body blockquote { border-left-color: var(--accent-link); background: rgba(47, 111, 237, .06); }
+html[data-theme="light"] body.on-blog .article-body code { background: rgba(47, 111, 237, .1); color: #1f4fbf; }
+html[data-theme="light"] .article-body pre { background: #f4f7fb; color: #24292e; border: 1px solid var(--dark-border); }
+html[data-theme="light"] .article-body pre code { color: inherit; }
+html[data-theme="light"] body.on-blog .article-body th { background: rgba(47, 111, 237, .06); }
+
+/* ---------- 音乐面板（当前搜索/历史浮动件，#2 重构后仍复用） ---------- */
+html[data-theme="light"] .ms-inline-input-wrap { background: rgba(30, 50, 90, .05); }
+html[data-theme="light"] .ms-inline-input-wrap:hover,
+html[data-theme="light"] .ms-inline-input-wrap.ms-active { background: rgba(30, 50, 90, .09); border-color: var(--panel-border); }
+html[data-theme="light"] .ms-results,
+html[data-theme="light"] .history-panel,
+html[data-theme="light"] .history-toggle {
+  background: var(--panel-bg);
+  border-color: var(--panel-border);
+  box-shadow: 0 10px 34px rgba(30, 50, 90, .16);
+  color: var(--dark-text-bright);
+}
+html[data-theme="light"] .history-toggle:hover { background: var(--glass-bg-hover); border-color: rgba(47, 111, 237, .35); }
+html[data-theme="light"] .ms-result:hover,
+html[data-theme="light"] .history-item:hover { background: rgba(47, 111, 237, .1); }
+html[data-theme="light"] .history-item.is-playing { background: rgba(47, 111, 237, .14); }
+html[data-theme="light"] .history-item.is-playing .history-name,
+html[data-theme="light"] .history-item.is-playing .hi-play { color: var(--accent-link); }
+html[data-theme="light"] .history-clear:hover { color: var(--danger); background: rgba(214, 69, 80, .1); }
+html[data-theme="light"] .ms-results::-webkit-scrollbar-thumb,
+html[data-theme="light"] .history-panel::-webkit-scrollbar-thumb { background: rgba(47, 111, 237, .28); }
+
+/* ---------- loader ---------- */
+html[data-theme="light"] .loader { background: var(--dark-bg); }
+
+/* ---------- 音乐抽屉（浅色） ---------- */
+html[data-theme="light"] .music-launcher {
+  background: rgba(255, 255, 255, .82);
+  border-color: var(--panel-border);
+  color: var(--dark-text-bright);
+  box-shadow: 0 8px 24px rgba(30, 50, 90, .16);
+}
+html[data-theme="light"] .music-launcher:hover { background: #fff; border-color: rgba(47, 111, 237, .4); }
+html[data-theme="light"] .drawer-body {
+  background: rgba(255, 255, 255, .92);
+  border-color: var(--panel-border);
+  box-shadow: 0 16px 44px rgba(30, 50, 90, .18);
+  color: var(--dark-text);
+}
+html[data-theme="light"] .drawer-handle { background: rgba(30, 50, 90, .04); border-bottom-color: var(--dark-border); }
+html[data-theme="light"] .drawer-collapse:hover { background: rgba(30, 50, 90, .07); color: var(--dark-text-bright); }
+html[data-theme="light"] .dtab:hover { background: rgba(47, 111, 237, .06); }
+html[data-theme="light"] .dtab.is-active { border-bottom-color: var(--accent-link); background: rgba(47, 111, 237, .08); }
+html[data-theme="light"] .dtab .history-count { background: rgba(47, 111, 237, .14); color: var(--accent-link); }
+html[data-theme="light"] #musicDrawer .ms-inline-input-wrap { background: rgba(30, 50, 90, .05); border-color: var(--dark-border); }
+html[data-theme="light"] #musicDrawer .ms-inline .ms-results { background: rgba(30, 50, 90, .04); }
+html[data-theme="light"] .drawer-panels::-webkit-scrollbar-thumb { background: rgba(47, 111, 237, .28); }

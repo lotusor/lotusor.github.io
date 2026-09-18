@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>文章编辑器 · lotus 博客后台</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <header class="admin-top">
+    <div class="brand">
+      <a href="../" class="back">← 返回站点</a>
+      <h1>文章编辑器</h1>
+    </div>
+    <div class="conn">
+      <input id="pat" class="pat" type="password" placeholder="GitHub Fine-grained PAT（repo Contents 读写）" autocomplete="off" />
+      <label class="remember"><input type="checkbox" id="remember" /> 记住（存本机）</label>
+      <button id="loadBtn" class="btn primary" type="button">连接并加载</button>
+      <button id="forgetBtn" class="btn ghost" type="button" title="清除本机 PAT">清除</button>
+    </div>
+  </header>
+
+  <div id="status" class="status" role="status"></div>
+
+  <main class="admin-main">
+    <!-- 左：文章列表 -->
+    <aside class="list-pane">
+      <div class="list-head">
+        <span>文章（<b id="postCount">0</b>）</span>
+        <button id="newBtn" class="btn small" type="button">＋ 新建</button>
+      </div>
+      <ul id="postList" class="post-list"></ul>
+    </aside>
+
+    <!-- 右：编辑区 -->
+    <section class="edit-pane" id="editPane" hidden>
+      <div class="row">
+        <label class="fld grow">
+          <span>标题 title</span>
+          <input id="f_title" type="text" placeholder="文章标题" />
+        </label>
+      </div>
+      <div class="row">
+        <label class="fld">
+          <span>标识 id（网址用，小写-短横线）</span>
+          <input id="f_id" type="text" placeholder="my-new-post" />
+          <small class="hint" id="idHint"></small>
+        </label>
+        <label class="fld">
+          <span>日期 date（YYYY-MM-DD）</span>
+          <input id="f_date" type="date" />
+        </label>
+        <label class="fld grow">
+          <span>标签 tags（逗号分隔）</span>
+          <input id="f_tags" type="text" placeholder="前端, 复盘" />
+        </label>
+      </div>
+      <div class="row">
+        <label class="fld grow">
+          <span>摘要 excerpt</span>
+          <textarea id="f_excerpt" rows="2" placeholder="一两句概括，显示在列表卡片上"></textarea>
+        </label>
+      </div>
+      <div class="row">
+        <div class="md-tools">
+          <span>正文 content（Markdown）</span>
+          <div class="md-actions">
+            <button id="previewToggle" class="btn small ghost" type="button">预览</button>
+          </div>
+        </div>
+        <textarea id="f_content" class="content" rows="18" placeholder="# 标题&#10;&#10;正文支持完整 Markdown…"></textarea>
+        <div id="preview" class="preview markdown-body" hidden></div>
+      </div>
+      <div class="edit-foot">
+        <button id="saveBtn" class="btn primary" type="button">保存到 GitHub（提交并触发更新）</button>
+        <button id="delBtn" class="btn danger ghost" type="button">删除此篇</button>
+        <span class="dirty" id="dirty" hidden>● 有未保存改动</span>
+      </div>
+    </section>
+
+    <section class="empty-pane" id="emptyPane">
+      <p>从左侧选择一篇文章编辑，或点击「＋ 新建」。请先在上方填入 PAT 并「连接并加载」。</p>
+    </section>
+  </main>
+
+  <p class="foot-note">
+    提示：本编辑器纯前端直连 GitHub Contents API，PAT 仅在你本机使用；建议用 <b>fine-grained token</b>，只授予本仓库 <b>Contents: Read and write</b>。保存即向 main 分支提交一次，GitHub Pages 约 1–2 分钟后生效。
+  </p>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js" crossorigin="anonymous"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

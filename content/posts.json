@@ -1,0 +1,75 @@
+[
+  {
+    "id": "building-this-blog",
+    "title": "从零搭一个纯静态博客：这一路的折腾与取舍",
+    "date": "2026-08-03",
+    "tags": [
+      "前端",
+      "静态博客",
+      "GitHub Pages",
+      "复盘"
+    ],
+    "excerpt": "从空目录到能在线听歌、能搜歌，一个纯静态博客是怎么一步步长出来的，以及那些踩过的坑。",
+    "content": "> 写在前面：这个博客是纯静态的 HTML/CSS/JS，托管在 GitHub Pages 上，一分服务器钱没花。这篇记录我从空目录折腾到能听歌、能搜歌的全过程，顺便把踩过的坑都摆出来。\n\n## 为什么自己搭，而不是用现成平台\n\n现成的博客平台很多，但我想完全掌控样式，又不想掏服务器钱，还想顺手练练前端。算下来纯静态 + GitHub Pages 是最轻的解法：\n\n- GitHub 免费托管，不用买服务器\n- 技术栈就是 HTML/CSS/JS，没有框架负担\n- 文章用 Markdown 写，渲染交给前端库\n\n说白了，我想要的东西恰好都能免费蹭到。\n\n## 第一步：先把门面撑起来\n\n博客第一眼是封面首页，我在这上面花了不少心思：\n\n1. 毛玻璃（glassmorphism）卡片，核心就一行 `backdrop-filter: blur()`\n2. 头像 + 社交图标\n3. 一句诗意的文案\n4. 入场 loader 动画\n\n背景参考了 emoera.com 的动态渐变，用多层 `radial-gradient` 加 `background-size` 动画，做出缓慢流动的深色光晕：\n\n```css\nbackground:\n  radial-gradient(closest-side, rgba(80,120,255,.35), transparent) 20% 30% / 60vmax 60vmax,\n  radial-gradient(closest-side, rgba(180,90,255,.30), transparent) 80% 70% / 55vmax 55vmax;\nbackground-repeat: no-repeat;\nanimation: drift 18s ease-in-out infinite alternate;\n```\n\n## 第二步：文章区与过渡\n\n文章列表和详情用 hash 路由（`#/blog`、`#/post/:id`）驱动，文章数据全塞在一个 `POSTS` 数组里。加新文章就是往数组里加个对象，简单粗暴。\n\n进入文章时加了「幕布式」过渡：一层遮罩先滑过，内容再淡入，比生硬跳转体面一点。\n\n## 第三步：右下角那个播放器\n\n我想让博客能直接放歌，最后选了 NeteaseMiniPlayer v3，一个 Web Component，用公共 API 拉取歌曲。关键是把它设成页面级定位，想拖到哪个角就拖到哪个角：\n\n```html\n<nmp-player\n  song-id='2127009514'\n  theme='dark'\n  layout='dock'\n  position='bottom-right'\n  lyric='true'></nmp-player>\n```\n\n搜索框则「绑」在播放器旁边：用 JS 实时测量播放器的位置，把搜索栏吸附到它边上。窗口缩放或者拖动播放器，它都会重新吸附，像只跟屁虫。\n\n## 第四步：真的能搜歌\n\n公共 API 提供搜索接口，搜到歌后把 `song-id` 写回播放器，它监听到属性变化就自动重载并播放：\n\n```js\nplayer.setAttribute('song-id', id);\nplayer.play();\n```\n\n## 踩过的坑\n\n- **git 浅克隆**：`--depth 1` 克隆后提交容易变成游离状态，后来老老实实改完整克隆。\n- **分支名带斜杠**：`feat/landing` 在某些情况下写不进引用，改成扁平名 `feat-landing-prototype` 才消停。\n- **本地推送无凭据**：把 Personal Access Token 内联进 URL 才推上去。\n- **仓库改名**：从 `-lotusor.github.io` 改名成 `start-now`，push 走 GitHub 重定向自动落到新仓库，算是有惊无险。\n\n## 写在最后\n\n回头看，核心代码其实没几行，但每一个「小功能」背后都是一堆取舍。写下来，下次就不用从头踩坑了。"
+  },
+  {
+    "id": "markov-text-gen",
+    "title": "30 行 JavaScript 让电脑学会“说胡话”：迷你 Markov 链文本生成器",
+    "date": "2026-07-20",
+    "tags": [
+      "JavaScript",
+      "算法",
+      "有趣"
+    ],
+    "excerpt": "不依赖任何库，用一阶马尔可夫链把一段语料「学」成自己的文风，再吐出看似通顺的胡话。",
+    "content": "马尔可夫链的核心思想一句话就能讲完：**下一个词只取决于当前词**。听起来像废话，但它真的能让程序「模仿」出一段文本的风格。\n\n## 思路\n\n拆成三步：\n\n1. 把语料按词切开\n2. 统计「当前词 → 下一个词」的出现频率\n3. 随机游走生成新文本\n\n先忘掉「频率」这回事，粗暴一点：把所有「当前词后面跟过哪些词」记下来，生成的时候随机挑一个。就这么简单。\n\n## 代码\n\n```js\nfunction buildChain(text) {\n  const words = text.split(/\\s+/).filter(Boolean);\n  const chain = {};\n  for (let i = 0; i < words.length - 1; i++) {\n    const cur = words[i];\n    const next = words[i + 1];\n    (chain[cur] = chain[cur] || []).push(next);\n  }\n  return chain;\n}\n\nfunction generate(chain, start, len = 30) {\n  let word = start in chain ? start : Object.keys(chain)[0];\n  const out = [word];\n  for (let i = 0; i < len; i++) {\n    const candidates = chain[word];\n    if (!candidates || !candidates.length) break;\n    word = candidates[Math.floor(Math.random() * candidates.length)];\n    out.push(word);\n  }\n  return out.join(\" \");\n}\n\nconst chain = buildChain(\"代码 是 诗 代码 也是 工具 诗 让人 安静\");\nconsole.log(generate(chain, \"代码\"));\n```\n\n## 效果\n\n喂进去的句子太短，生成结果会比较「repeat」，翻来覆去就那么几个词。真实场景里把一整本小说当语料，效果会惊艳很多，读起来还真像那么回事。\n\n> 小提示：语料越大，生成文本越「像人话」，但也越容易整段抄原文——注意版权。"
+  },
+  {
+    "id": "http-cache-explained",
+    "title": "把 HTTP 缓存讲清楚：从强缓存到协商缓存",
+    "date": "2026-07-12",
+    "tags": [
+      "前端",
+      "HTTP",
+      "性能"
+    ],
+    "excerpt": "强缓存不发请求，协商缓存发请求但可能 304。一张表 + 几个 Header 就能记住。",
+    "content": "缓存是前端性能优化的第一道关。先记一句话：**强缓存不询问服务器，协商缓存会询问，但可能拿到 304。**\n\n## 两类缓存，一张表说清\n\n| 类型 | 关键 Header | 是否发请求 | 典型状态码 |\n| --- | --- | --- | --- |\n| 强缓存 | Cache-Control / Expires | 否 | 200 (from disk cache) |\n| 协商缓存 | ETag / Last-Modified | 是 | 304 或 200 |\n\n区别就一个：浏览器到底有没有问服务器一声。\n\n## 强缓存：不问直接用\n\n```http\nCache-Control: max-age=3600, public\nExpires: Wed, 21 Oct 2026 07:28:00 GMT\n```\n\n现代浏览器优先看 `Cache-Control` 的 `max-age`（相对时间）。`Expires` 是绝对时间，容易受时钟漂移影响，基本算老前辈了。\n\n## 协商缓存：问一声，省点流量\n\n强缓存失效后，浏览器会带上条件请求：\n\n```http\nIf-None-Match: \"abc123\"      # 对应响应的 ETag\nIf-Modified-Since: <date>    # 对应响应的 Last-Modified\n```\n\n服务器比对一下，内容没变就回 `304 Not Modified`，不带响应体，传输体积直接省下来。\n\n## 实践建议\n\n- 带 hash 的静态资源（`app.4f3a.js`）用 `max-age=31536000, immutable`，一年不用问\n- HTML 用 `no-cache`，每次走协商，保证及时更新\n- 上线前开 DevTools 的 Network 面板，确认缓存命中情况\n\n这套记住了，面试里被问缓存基本不会慌。"
+  },
+  {
+    "id": "write-a-vite-plugin",
+    "title": "从零写一个 Vite 插件：自动给组件类名加前缀",
+    "date": "2026-06-28",
+    "tags": [
+      "前端",
+      "Vite",
+      "工程化"
+    ],
+    "excerpt": "理解 Vite 插件就是一串钩子函数，再动手实现一个「自动给类名加项目前缀」的小工具。",
+    "content": "Vite 插件说白了就是一个**带钩子（hook）的对象**。最常用的钩子是 `transform`，模块被加载的时候，它能偷偷改写源码。\n\n## 最小骨架\n\n先写一个能跑的最小版本：\n\n```js\nexport default function myPlugin(options = {}) {\n  return {\n    name: \"vite-plugin-prefix\",\n    transform(code, id) {\n      // 只处理 .vue 文件\n      if (!id.endsWith(\".vue\")) return null;\n      const prefixed = code.replace(/class=\"([^\"]+)\"/g,\n        (_, cls) => `class=\"kb-${cls}\"`);\n      return { code: prefixed, map: null };\n    }\n  };\n}\n```\n\n逻辑很直白：不是 `.vue` 文件就返回 `null`，是的话就把所有 `class` 前面塞一个 `kb-` 前缀。\n\n## 怎么用\n\n```js\n// vite.config.js\nimport prefix from \"./my-plugin\";\nexport default {\n  plugins: [prefix()]\n};\n```\n\n## 几个注意点\n\n1. 钩子返回 `null` 表示「这文件我不碰」，Vite 会继续往下走\n2. 改了源码最好顺便返回新的 `map`，不然 SourceMap 会错位，调试时定位全歪\n3. 插件顺序影响结果，`enforce: \"pre\" | \"post\"` 可以调整先后\n\n写插件最大的乐趣，是发现「原来构建工具也不过是一串函数」。"
+  },
+  {
+    "id": "love-pure-functions",
+    "title": "为什么我越来越喜欢纯函数",
+    "date": "2026-06-10",
+    "tags": [
+      "JavaScript",
+      "心得",
+      "函数式"
+    ],
+    "excerpt": "同样的输入永远得到同样的输出，没有隐藏状态——这种「无聊」恰恰是它的优点。",
+    "content": "纯函数就两条铁律：\n\n1. **相同输入永远得到相同输出**\n2. **没有副作用**（不改全局变量、不发请求、不碰 DOM）\n\n听起来像给自己上枷锁，但越写越觉得这枷锁是保护。\n\n## 对比一下\n\n```js\n// 不纯：依赖外部状态，结果不可预测\nlet taxRate = 0.1;\nfunction withTax(price) { return price * (1 + taxRate); }\n\n// 纯：所有依赖都显式传入\nfunction withTaxPure(price, rate) { return price * (1 + rate); }\n```\n\n`withTax` 的结果取决于外面那个 `taxRate`，哪天谁改它一下，同样的 `price` 就给出不同的答案。纯函数版本把所有依赖摊在参数上，一眼看穿。\n\n## 好处\n\n- **好测试**：不用 mock 环境，直接断言返回值\n- **好推理**：读到调用处就知道结果，不用翻上下文\n- **好并行**：没有共享状态，天然线程安全\n- **好缓存**：可以用 `memoize` 记住计算结果\n\n> 当然，程序最终总要「做点什么」（写库、发请求）。纯函数的价值在于把**计算**和**副作用**分开，让核心逻辑保持干净。\n\n不是所有代码都要纯，但把能纯的部分提纯，复杂度肉眼可见地往下掉。"
+  },
+  {
+    "id": "git-rebase-clean-history",
+    "title": "Git 提交历史乱了？用 rebase 收拾干净",
+    "date": "2026-05-22",
+    "tags": [
+      "Git",
+      "工具",
+      "心得"
+    ],
+    "excerpt": "「fix typo」「再来一次」堆了一屏？rebase -i 帮你把提交压成一条干净的故事线。",
+    "content": "只要本地分支还没推到远端，历史随便怎么收拾都行。交互式 rebase 是我最常用的整理工具。\n\n## 启动交互式 rebase\n\n```bash\ngit rebase -i HEAD~4\n```\n\n会打开一个编辑器，列出最近 4 个提交：\n\n```\npick a1b2c3 添加登录接口\npick d4e5f6 fix typo\npick 7a8b9c 补充单元测试\npick 0d1e2f 再来一次\n```\n\n一眼就能看出问题：`fix typo`、`再来一次` 这种提交，留着只会污染历史。\n\n## 常用操作\n\n- `pick` → 保留\n- `squash` / `fixup` → 合并到上一个提交（fixup 丢弃提交信息）\n- `reword` → 改提交信息\n- `drop` → 删除该提交\n\n把后三个改成 `fixup`，保存退出，一条干净利落的提交就压出来了。\n\n## 黄金法则\n\n> **只 rebase 你自己的、还没推送到公共分支的提交。** 已经推给别人、且别人基于它工作的历史，千万别动——那会制造「分叉的真相」。\n\n整理完的历史就像一篇排版好的文章，别人一眼能看懂你为什么这么改。"
+  }
+]

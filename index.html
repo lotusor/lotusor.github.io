@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,9 +7,12 @@
   <title>lotus · 雨霁的blog</title>
   <meta name="description" content="lotusor 的个人技术博客 — 隙里碎笔，用代码记录思考。" />
   <link rel="icon" type="image/jpeg" href="assets/avatar.jpg" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
+  <link id="hljs-dark"  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
+  <link id="hljs-light" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" disabled />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="landing.css" />
+  <link rel="stylesheet" href="light.css" />
+  <script src="theme.js"></script>
 </head>
 <body>
   <!-- 入场 loading 动画 -->
@@ -27,6 +30,9 @@
         <span class="brand-mark"><img src="assets/avatar.jpg" alt="" /></span>
         <span class="brand-name">lotusor</span>
       </a>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题" aria-pressed="false">
+        <span class="theme-icon" aria-hidden="true">☀</span>
+      </button>
     </div>
   </header>
 
@@ -37,44 +43,70 @@
     <p class="footer-sub">基于纯静态 HTML / CSS / JS 构建，Markdown 由 marked.js 渲染。</p>
   </footer>
 
-  <!-- 音乐播放器（页面级定位：position 可改为 bottom-left / bottom-right / top-left / top-right） -->
-  <nmp-player
-    song-id="2127009514"
-    api-base-url="https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php"
-    theme="dark"
-    layout="dock"
-    position="bottom-right"
-    lyric="true"
-    default-minimized="false"
-    storage-key="lotusor-blog"></nmp-player>
-
-  <!-- 内联搜索栏（固定在左下角，与播放器相互独立） -->
-  <div class="music-dock" id="musicSearch">
-    <div class="ms-inline" id="msInline">
-      <div class="ms-inline-input-wrap">
-        <svg class="ms-search-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
-        <input class="ms-input" id="msInput" type="search" placeholder="搜歌曲" autocomplete="off" aria-label="搜索歌曲" />
-        <button class="ms-close" id="msClose" type="button" aria-label="关闭搜索" hidden>✕</button>
-      </div>
-      <ul class="ms-results" id="msResults" hidden></ul>
-      <div class="ms-status" id="msStatus"></div>
-    </div>
-  </div>
-
-  <!-- 历史点播记录（本地保存，最多 20 首；点击切歌自动播放） -->
-  <div class="history-dock" id="historyDock">
-    <div class="history-panel" id="historyPanel" hidden>
-      <div class="history-head">
-        <span>历史点播记录</span>
-        <button class="history-clear" id="historyClear" type="button">清空</button>
-      </div>
-      <ul class="history-list" id="historyList" aria-label="历史点播记录列表"></ul>
-      <p class="history-empty" id="historyEmpty" hidden>还没有点播记录，搜一首歌试试～</p>
-    </div>
-    <button class="history-toggle" id="historyToggle" type="button" aria-expanded="false" aria-controls="historyPanel">
-      <svg class="hi-clock" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm.5-13H11v6l5 3 .75-1.23-4.25-2.52V7Z"/></svg>
-      历史 <span class="history-count" id="historyCount">0</span>
+  <!-- ==================== 音乐抽屉：播放器 + 搜索 + 历史，统一可拖拽悬浮组件 ==================== -->
+  <div class="music-drawer" id="musicDrawer" data-collapsed="false">
+    <!-- 收起态：悬浮圆形按钮，点击展开 -->
+    <button class="music-launcher" id="musicLauncher" type="button" aria-label="展开音乐面板">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 3v9.28a4 4 0 1 0 2 3.47V7h4V3h-6Z"/></svg>
     </button>
+
+    <!-- 展开态：抽屉主体 -->
+    <div class="drawer-body" id="drawerBody" role="region" aria-label="音乐">
+      <!-- 拖拽把手：拖动整个抽屉即移动播放器；右侧为收起按钮 -->
+      <div class="drawer-handle" id="drawerHandle" title="按住可拖动">
+        <span class="drawer-grip" aria-hidden="true">⠿</span>
+        <span class="drawer-label">音乐</span>
+        <button class="drawer-collapse" id="drawerCollapse" type="button" aria-label="收起音乐面板">▾</button>
+      </div>
+
+      <!-- 选项卡 -->
+      <div class="drawer-tabs" role="tablist">
+        <button class="dtab is-active" type="button" role="tab" data-tab="play" aria-selected="true">播放</button>
+        <button class="dtab" type="button" role="tab" data-tab="search" aria-selected="false">搜索</button>
+        <button class="dtab" type="button" role="tab" data-tab="history" aria-selected="false">历史 <span class="history-count" id="historyCount">0</span></button>
+      </div>
+
+      <!-- 面板 -->
+      <div class="drawer-panels">
+        <section class="dpanel is-active" data-panel="play" role="tabpanel">
+          <nmp-player
+            song-id="2127009514"
+            api-base-url="https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php"
+            theme="dark"
+            layout="compact"
+            embed="true"
+            lyric="true"
+            storage-key="lotusor-blog"></nmp-player>
+        </section>
+
+        <section class="dpanel" data-panel="search" role="tabpanel">
+          <div class="music-dock" id="musicSearch">
+            <div class="ms-inline" id="msInline">
+              <div class="ms-inline-input-wrap ms-active">
+                <svg class="ms-search-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+                <input class="ms-input" id="msInput" type="search" placeholder="搜歌曲" autocomplete="off" aria-label="搜索歌曲" />
+                <button class="ms-close" id="msClose" type="button" aria-label="清空搜索" hidden>✕</button>
+              </div>
+              <ul class="ms-results" id="msResults" hidden></ul>
+              <div class="ms-status" id="msStatus"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="dpanel" data-panel="history" role="tabpanel">
+          <div class="history-dock" id="historyDock">
+            <div class="history-panel" id="historyPanel">
+              <div class="history-head">
+                <span>历史点播记录</span>
+                <button class="history-clear" id="historyClear" type="button">清空</button>
+              </div>
+              <ul class="history-list" id="historyList" aria-label="历史点播记录列表"></ul>
+              <p class="history-empty" id="historyEmpty" hidden>还没有点播记录，搜一首歌试试～</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <!-- Markdown 解析与代码高亮（CDN） -->
