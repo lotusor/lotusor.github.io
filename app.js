@@ -14,9 +14,14 @@ function byDateDesc(a, b) {
   return a.date < b.date ? 1 : -1;
 }
 
+/* 仅返回已发布文章（status==='draft' 的草稿不在前台出现） */
+function publishedPosts() {
+  return POSTS.filter(p => p.status !== "draft");
+}
+
 function allTags() {
   const map = new Map();
-  POSTS.forEach(p => p.tags.forEach(t => map.set(t, (map.get(t) || 0) + 1)));
+  publishedPosts().forEach(p => p.tags.forEach(t => map.set(t, (map.get(t) || 0) + 1)));
   return [...map.entries()].sort((a, b) => b[1] - a[1]);
 }
 
@@ -125,7 +130,7 @@ function viewLanding() {
 
 /* ---------------------- 文章列表（MY-THINK 进入） ---------------------- */
 function viewBlog() {
-  const posts = [...POSTS].sort(byDateDesc);
+  const posts = [...publishedPosts()].sort(byDateDesc);
   const tags = allTags().slice(0, 8);
   const cards = posts.map(postCard).join("");
   $app.innerHTML = `
@@ -155,7 +160,7 @@ function postCard(p) {
 }
 
 function viewPost(id) {
-  const p = POSTS.find(x => x.id === id);
+  const p = publishedPosts().find(x => x.id === id);
   if (!p) { viewNotFound(); return; }
   $app.innerHTML = `
     <article class="article">
@@ -175,7 +180,7 @@ function viewPost(id) {
 
 function viewTag(tag) {
   const decoded = decodeURIComponent(tag);
-  const posts = POSTS.filter(p => p.tags.includes(decoded)).sort(byDateDesc);
+  const posts = publishedPosts().filter(p => p.tags.includes(decoded)).sort(byDateDesc);
   const cards = posts.length ? posts.map(postCard).join("")
     : `<p class="empty">这个标签下还没有文章。</p>`;
   $app.innerHTML = `

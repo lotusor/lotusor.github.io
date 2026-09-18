@@ -1,250 +1,346 @@
 /* =========================================================
-   admin.js — 纯前端文章编辑器（GitHub Contents API + PAT）
-   读写仓库内 content/posts.json；保存即向 main 分支提交一次。
-   安全：PAT 仅在本机使用；勾选“记住”才存 localStorage。
+   admin.js — WordPress 风格博客编辑器（Vditor + GitHub Contents API）
+   口令门（前端比对，防误入） + fine-grained PAT（实际写 GitHub）
+   特性：三栏布局 / 草稿·发布 / 图片上传到 assets / 修订历史+回滚 / 本地自动保存 / 站点样式预览
    ========================================================= */
 (function () {
   "use strict";
 
-  const OWNER = "lotusor";
-  const REPO = "lotusor.github.io";
-  const BRANCH = "main";
+  // ---------- 配置 ----------
+  const OWNER = "lotusor", REPO = "lotusor.github.io", BRANCH = "main";
   const DATA_PATH = "content/posts.json";
+  const SITE_ORIGIN = "https://lotusor.github.io";
   const API = "https://api.github.com";
-  const PAT_KEY = "lotusor-admin-pat";
   const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  const PASS_HASH = "9de6d2444e21aa89981ff0e5893640d3783b7652b4eaafe88687cadeba95db8c"; // sha256(口令)，见运维指南 §14 轮换方法
+  const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
+  const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
+  const AUTOSAVE_KEY = "lotusor-admin-autosave";
 
-  // ---- DOM ----
+  // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
-  const patInput = $("pat"), remember = $("remember");
+  const gate = $("gate"), gateForm = $("gateForm"), gateInput = $("gateInput"), gateErr = $("gateErr");
+  const app = $("app"), connDot = $("connDot");
+  const connectBar = $("connectBar"), patInput = $("pat"), remember = $("remember"), connHint = $("connHint");
   const statusEl = $("status");
-  const postListEl = $("postList"), postCountEl = $("postCount");
-  const editPane = $("editPane"), emptyPane = $("emptyPane");
-  const fId = $("f_id"), fTitle = $("f_title"), fDate = $("f_date"), fTags = $("f_tags"), fExcerpt = $("f_excerpt"), fContent = $("f_content");
-  const idHint = $("idHint"), dirty = $("dirty");
-  const preview = $("preview"), previewToggle = $("previewToggle");
+  const postListEl = $("postList"), postCountEl = $("postCount"), searchList = $("searchList");
+  const editorEmpty = $("editorEmpty"), vditorHost = $("vditor");
+  const sidePane = $("sidePane");
+  const fId = $("f_id"), fTitle = $("f_title"), fDate = $("f_date"), fTags = $("f_tags"), fExcerpt = $("f_excerpt"), fStatus = $("f_status");
+  const idHint = $("idHint"), autosaveTip = $("autosaveTip");
 
-  let posts = [];      // 当前编辑中的文章数组
-  let fileSha = null;  // Contents API 的 sha（提交乐观锁）
-  let current = -1;    // 正在编辑的索引；-1 表示新建
-  let isDirty = false;
+  // ---------- 状态 ----------
+  let posts = [];
+  let fileSha = null;
+  let current = -1;        // 编辑索引；-1 新建
+  let vd = null;           // Vditor 实例
+  let connected = false;
+  let autosaveTimer = null;
+  let vdReady = false;         // Vditor 异步初始化完成标志
+  let pendingContent = null;   // 就绪前待写入的正文
 
-  // ---- base64（UTF-8 安全） ----
-  function b64decode(b64) {
-    const bin = atob(b64.replace(/\s+/g, ""));
-    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
-    return new TextDecoder("utf-8").decode(bytes);
-  }
-  function b64encode(str) {
-    const bytes = new TextEncoder().encode(str);
-    let bin = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-    }
-    return btoa(bin);
-  }
-
+  // ---------- 工具 ----------
+  function b64decode(b64) { const bin = atob(b64.replace(/\s+/g, "")); const by = Uint8Array.from(bin, c => c.charCodeAt(0)); return new TextDecoder("utf-8").decode(by); }
+  function b64encode(str) { const by = new TextEncoder().encode(str); let bin = ""; const CH = 0x8000; for (let i = 0; i < by.length; i += CH) bin += String.fromCharCode.apply(null, by.subarray(i, i + CH)); return btoa(bin); }
+  function fileToB64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(file); }); }
   function token() { return (patInput.value || "").trim(); }
-  function headers(withAuth) {
-    const h = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
-    if (withAuth) h["Authorization"] = "Bearer " + token();
-    return h;
-  }
+  function setStatus(m, k) { statusEl.textContent = m || ""; statusEl.className = "status" + (k ? " " + k : ""); }
+  function httpHint(s) { return { 401: "401 未授权：PAT 无效/权限不足（需 Contents 读写）", 403: "403 禁止：速率限制或权限不足", 404: "404 未找到：路径/分支?", 409: "409 冲突：远端已变动，请重新「连接并加载」" }[s] || ("HTTP " + s); }
+  async function sha256hex(str) { const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); }
+  function ghHeaders(auth) { const h = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }; if (auth) h["Authorization"] = "Bearer " + token(); return h; }
 
-  function setStatus(msg, kind) {
-    statusEl.textContent = msg || "";
-    statusEl.className = "status" + (kind ? " " + kind : "");
+  // ---------- 口令门 ----------
+  async function tryUnlock(pass) {
+    const h = await sha256hex(pass);
+    if (h === PASS_HASH) { sessionStorage.setItem(AUTH_KEY, "1"); enterApp(); return true; }
+    return false;
   }
+  function showGate() { gate.hidden = false; app.hidden = true; }
+  function enterApp() { gate.hidden = true; app.hidden = false; if (connected) return; initPat(); }
 
-  // ---- 加载 ----
-  async function load() {
-    if (!token()) { setStatus("请先填入 PAT。", "err"); return; }
-    setStatus("加载中…", "info");
+  gateForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    gateErr.textContent = "";
+    const ok = await tryUnlock(gateInput.value);
+    if (!ok) gateErr.textContent = "口令不正确";
+  });
+  $("lockBtn").addEventListener("click", () => { sessionStorage.removeItem(AUTH_KEY); location.reload(); });
+
+  // ---------- GitHub 连接 ----------
+  function initPat() {
+    const saved = localStorage.getItem(PAT_KEY);
+    if (saved) { patInput.value = saved; remember.checked = true; doConnect(); }
+    else { connectBar.hidden = false; connHint.textContent = "填入 PAT 后连接以开始编辑。"; }
+  }
+  $("ghBtn").addEventListener("click", () => { connectBar.hidden = !connectBar.hidden; });
+  $("connectBtn").addEventListener("click", () => {
+    if (remember.checked && token()) localStorage.setItem(PAT_KEY, token()); else localStorage.removeItem(PAT_KEY);
+    doConnect();
+  });
+  $("forgetBtn").addEventListener("click", () => { localStorage.removeItem(PAT_KEY); patInput.value = ""; connected = false; connDot.classList.remove("on"); setStatus("已清除本机 PAT。", "info"); });
+
+  async function doConnect() {
+    if (!token()) { connectBar.hidden = false; connHint.textContent = "请先填入 PAT。"; return; }
+    setStatus("连接 GitHub…", "info");
     try {
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${BRANCH}`, { headers: headers(true) });
-      if (res.status === 404) {
-        // 远端还没有该文件：以站点当前数据为初值，保存时新建
-        posts = []; fileSha = null;
-        setStatus("远端暂无 posts.json，将从空开始（保存时创建）。", "info");
-      } else if (!res.ok) {
-        throw new Error(httpHint(res.status));
-      } else {
-        const data = await res.json();
-        fileSha = data.sha;
-        posts = JSON.parse(b64decode(data.content));
-        setStatus(`已加载 ${posts.length} 篇文章。`, "ok");
-      }
+      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${BRANCH}`, { headers: ghHeaders(true) });
+      if (res.status === 404) { posts = []; fileSha = null; }
+      else if (!res.ok) throw new Error(httpHint(res.status));
+      else { const d = await res.json(); fileSha = d.sha; posts = JSON.parse(b64decode(d.content)); }
+      connected = true; connDot.classList.add("on"); connectBar.hidden = true;
+      setStatus(`已连接，载入 ${posts.length} 篇文章。`, "ok");
       renderList();
-      showEmpty();
-    } catch (e) {
-      setStatus("加载失败：" + e.message, "err");
-    }
+    } catch (e) { setStatus("连接失败：" + e.message, "err"); connectBar.hidden = false; }
   }
 
-  function httpHint(s) {
-    if (s === 401) return "401 未授权：PAT 无效/过期或权限不足（需 Contents 读写）。";
-    if (s === 403) return "403 禁止：可能是速率限制或 PAT 权限不足。";
-    if (s === 404) return "404 未找到：仓库/路径/分支是否正确？";
-    if (s === 409) return "409 冲突：远端已被改动，请重新「连接并加载」后再保存。";
-    return "HTTP " + s;
-  }
-
-  // ---- 列表 ----
+  // ---------- 列表 ----------
   function renderList() {
+    const q = (searchList.value || "").trim().toLowerCase();
+    const rows = posts.map((p, idx) => ({ p, idx }))
+      .filter(({ p }) => !q || (p.title || "").toLowerCase().includes(q) || (p.tags || []).join(",").toLowerCase().includes(q))
+      .sort((a, b) => String(b.p.date).localeCompare(String(a.p.date)));
     postCountEl.textContent = String(posts.length);
     postListEl.innerHTML = "";
-    posts
-      .map((p, idx) => ({ p, idx }))
-      .sort((a, b) => String(b.p.date).localeCompare(String(a.p.date)))
-      .forEach(({ p, idx }) => {
-        const li = document.createElement("li");
-        li.dataset.idx = String(idx);
-        if (idx === current) li.classList.add("active");
-        const t = document.createElement("span"); t.className = "t"; t.textContent = p.title || "(无标题)";
-        const d = document.createElement("span"); d.className = "d"; d.textContent = `${p.date || ""} · ${p.id || ""}`;
-        li.appendChild(t); li.appendChild(d);
-        li.addEventListener("click", () => select(idx));
-        postListEl.appendChild(li);
-      });
+    rows.forEach(({ p, idx }) => {
+      const li = document.createElement("li"); li.dataset.idx = String(idx);
+      if (idx === current) li.classList.add("active");
+      const t = document.createElement("span"); t.className = "t";
+      t.textContent = p.title || "(无标题)";
+      if (p.status === "draft") { const b = document.createElement("span"); b.className = "badge"; b.textContent = "草稿"; t.appendChild(b); }
+      const d = document.createElement("span"); d.className = "d"; d.textContent = `${p.date || ""} · ${p.id || ""}`;
+      li.appendChild(t); li.appendChild(d);
+      li.addEventListener("click", () => select(idx));
+      postListEl.appendChild(li);
+    });
+  }
+  searchList.addEventListener("input", renderList);
+
+  // ---------- Vditor ----------
+  function ensureVditor() {
+    if (vd) return;
+    vditorHost.hidden = false; editorEmpty.hidden = true;
+    const isDark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+    vd = new Vditor("vditor", {
+      cdn: "https://cdn.jsdelivr.net/npm/vditor@3.11.2",
+      mode: "ir",
+      lang: "zh_CN",
+      theme: isDark ? "dark" : "classic",
+      height: Math.max(420, window.innerHeight - 210),
+      minHeight: 360,
+      icon: "ant",
+      cache: { enable: false },
+      preview: { hljs: { style: isDark ? "github-dark" : "github", enable: true } },
+      toolbar: [
+        "headings", "bold", "italic", "strike", "|", "list", "ordered-list", "check", "|",
+        "quote", "code", "inline-code", "link", "upload", "table", "|", "undo", "redo", "|",
+        "edit-mode", "outline", "preview", "fullscreen",
+      ],
+      upload: { multiple: true, accept: "image/*", handler: onUpload },
+      input: () => scheduleAutosave(),
+      after: () => { vdReady = true; if (pendingContent !== null) { vd.setValue(pendingContent); pendingContent = null; } },
+    });
+  }
+  function setEditorContent(md) { if (vdReady && vd) vd.setValue(md || ""); else pendingContent = md || ""; }
+  function getEditorContent() { return (vdReady && vd) ? vd.getValue() : (pendingContent || ""); }
+
+  async function onUpload(files) {
+    if (!connected) { setStatus("请先连接 GitHub 再上传图片。", "err"); return; }
+    for (const f of files) {
+      try {
+        const ext = ((f.name.split(".").pop() || "png").toLowerCase()).replace(/[^a-z0-9]/g, "") || "png";
+        const name = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+        const path = `assets/${name}`;
+        const b64 = await fileToB64(f);
+        await ghPut(path, b64, `assets: 上传图片 ${name}`);
+        const url = `${SITE_ORIGIN}/${path}`;
+        if (vd) vd.insertValue(`![${f.name.replace(/\.[^.]+$/, "")}](${url})\n`);
+        setStatus(`图片已上传：${name}`, "ok");
+      } catch (e) { setStatus("图片上传失败：" + e.message, "err"); }
+    }
   }
 
-  function showEmpty() { editPane.hidden = true; emptyPane.hidden = false; }
-
+  // ---------- 选择 / 新建 ----------
   function select(idx) {
-    current = idx;
-    const p = posts[idx];
-    fId.value = p.id || ""; fTitle.value = p.title || ""; fDate.value = p.date || "";
-    fTags.value = (p.tags || []).join(", "); fExcerpt.value = p.excerpt || ""; fContent.value = p.content || "";
-    fId.readOnly = true; idHint.textContent = "（已有文章，id 不建议改动，否则旧链接失效）"; idHint.classList.remove("bad");
-    editPane.hidden = false; emptyPane.hidden = true;
-    setDirty(false); hidePreview();
+    current = idx; const p = posts[idx];
+    sidePane.hidden = false;
+    ensureVditor();
+    fId.value = p.id || ""; fId.readOnly = true; idHint.textContent = "（已有文章，改 id 会使旧链接失效）"; idHint.classList.remove("bad");
+    fDate.value = p.date || ""; fTags.value = (p.tags || []).join(", "); fExcerpt.value = p.excerpt || ""; fStatus.value = p.status === "draft" ? "draft" : "published";
+    setEditorContent(p.content || "");
     renderList();
+    checkAutosave(p.id);
   }
-
   function newPost() {
-    current = -1;
-    fId.value = ""; fTitle.value = ""; fDate.value = new Date().toISOString().slice(0, 10);
-    fTags.value = ""; fExcerpt.value = ""; fContent.value = "";
-    fId.readOnly = false; idHint.textContent = ""; idHint.classList.remove("bad");
-    editPane.hidden = false; emptyPane.hidden = true;
-    setDirty(true); hidePreview();
-    fId.focus();
-    renderList();
+    current = -1; sidePane.hidden = false; ensureVditor();
+    fId.value = ""; fId.readOnly = false; idHint.textContent = ""; idHint.classList.remove("bad");
+    fDate.value = new Date().toISOString().slice(0, 10); fTags.value = ""; fExcerpt.value = ""; fStatus.value = "draft";
+    setEditorContent("");
+    renderList(); fId.focus(); autosaveTip.textContent = "";
   }
+  $("newBtn").addEventListener("click", newPost);
 
-  // ---- 表单收集 + 校验 ----
+  // ---------- 收集 / 校验 ----------
   function collect() {
     return {
-      id: fId.value.trim(),
-      title: fTitle.value.trim(),
-      date: fDate.value.trim(),
+      id: fId.value.trim(), title: fTitle.value.trim(), date: fDate.value.trim(),
       tags: fTags.value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
-      excerpt: fExcerpt.value.trim(),
-      content: fContent.value,
+      excerpt: fExcerpt.value.trim(), content: getEditorContent(),
+      status: fStatus.value === "draft" ? "draft" : "published",
     };
   }
   function validate(p) {
-    if (!p.id) return "id 不能为空";
-    if (!ID_RE.test(p.id)) return "id 只能用小写字母、数字和短横线";
-    if (current === -1 && posts.some((x, i) => x.id === p.id)) return "id 已存在，需唯一";
     if (!p.title) return "标题不能为空";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.date)) return "日期格式应为 YYYY-MM-DD";
+    if (!p.id) return "id 不能为空";
+    if (!ID_RE.test(p.id)) return "id 只能小写字母/数字/短横线";
+    if (current === -1 && posts.some(x => x.id === p.id)) return "id 已存在";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.date)) return "日期格式 YYYY-MM-DD";
     return null;
   }
 
-  // ---- 保存 ----
-  async function save() {
-    if (!token()) { setStatus("请先填入 PAT。", "err"); return; }
+  // ---------- 保存 ----------
+  async function save(asDraft) {
+    if (!connected) { setStatus("请先连接 GitHub。", "err"); connectBar.hidden = false; return; }
+    if (asDraft) fStatus.value = "draft";
     const p = collect();
     const err = validate(p);
     if (err) { setStatus("校验未通过：" + err, "err"); return; }
-
-    if (current === -1) { posts.push(p); }
-    else { posts[current] = p; current = posts.findIndex(x => x === p); }
-
+    if (current === -1) { posts.push(p); current = posts.length - 1; }
+    else { posts[current] = p; }
     setStatus("提交中…", "info");
     try {
-      const body = {
-        message: `content: 更新文章《${p.title}》(${p.id})`,
-        content: b64encode(JSON.stringify(posts, null, 2) + "\n"),
-        branch: BRANCH,
-      };
-      if (fileSha) body.sha = fileSha;
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}`, {
-        method: "PUT", headers: Object.assign({ "Content-Type": "application/json" }, headers(true)),
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(httpHint(res.status));
-      const data = await res.json();
-      fileSha = data.content && data.content.sha;
-      renderList();
-      setStatus(`已提交到 main（${(data.commit && data.commit.sha || "").slice(0, 7)}）。Pages 约 1–2 分钟生效。`, "ok");
-      setDirty(false);
-    } catch (e) {
-      setStatus("保存失败：" + e.message, "err");
-    }
+      await commitPosts(JSON.stringify(posts, null, 2) + "\n", `content: ${p.status === "draft" ? "草稿" : "更新"}《${p.title}》(${p.id})`);
+      renderList(); clearAutosave();
+      setStatus(`已保存到 main（${p.status === "draft" ? "草稿" : "已发布"}）。Pages 约 1–2 分钟生效。`, "ok");
+    } catch (e) { setStatus("保存失败：" + e.message, "err"); }
+  }
+  $("saveBtn").addEventListener("click", () => save(false));
+  $("saveDraftBtn").addEventListener("click", () => save(true));
+
+  async function commitPosts(text, message) {
+    const body = { message, content: b64encode(text), branch: BRANCH };
+    if (fileSha) body.sha = fileSha;
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}`, { method: "PUT", headers: Object.assign({ "Content-Type": "application/json" }, ghHeaders(true)), body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(httpHint(res.status));
+    const d = await res.json(); fileSha = d.content && d.content.sha;
+  }
+  async function ghPut(path, b64content, message) {
+    let sha;
+    const g = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}?ref=${BRANCH}`, { headers: ghHeaders(true) });
+    if (g.ok) sha = (await g.json()).sha;
+    const body = { message, content: b64content, branch: BRANCH }; if (sha) body.sha = sha;
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}`, { method: "PUT", headers: Object.assign({ "Content-Type": "application/json" }, ghHeaders(true)), body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(httpHint(res.status));
+    return res.json();
   }
 
   function del() {
-    if (current < 0) return;
-    const p = posts[current];
-    if (!confirm(`确认删除《${p.title}》(${p.id})？\n（仅从编辑列表移除，需点“保存”才会提交到仓库。）`)) return;
-    posts.splice(current, 1);
-    current = -1;
-    renderList(); showEmpty(); setDirty(true);
+    if (current < 0) return; const p = posts[current];
+    if (!confirm(`确认删除《${p.title}》(${p.id})？\n（需点“保存到 GitHub”才会真正提交删除。）`)) return;
+    posts.splice(current, 1); current = -1; sidePane.hidden = true; setEditorContent("");
+    renderList(); autosaveTip.textContent = "";
+    setStatus("已从列表删除，记得点“保存到 GitHub”提交。", "info");
   }
-
-  // ---- 预览 ----
-  function togglePreview() {
-    if (preview.hidden) {
-      const html = window.marked ? marked.parse(fContent.value || "") : (fContent.value || "");
-      preview.innerHTML = window.DOMPurify ? DOMPurify.sanitize(html) : html;
-      preview.hidden = false; fContent.style.display = "none";
-      previewToggle.textContent = "编辑";
-    } else { hidePreview(); }
-  }
-  function hidePreview() {
-    preview.hidden = true; fContent.style.display = ""; previewToggle.textContent = "预览";
-  }
-
-  // ---- 脏标记 ----
-  function setDirty(v) { isDirty = v; dirty.hidden = !v; }
-
-  // ---- PAT 记忆 ----
-  function initPat() {
-    const saved = localStorage.getItem(PAT_KEY);
-    if (saved) { patInput.value = saved; remember.checked = true; }
-  }
-  function persistPat() {
-    if (remember.checked && token()) localStorage.setItem(PAT_KEY, token());
-    else localStorage.removeItem(PAT_KEY);
-  }
-  function forgetPat() {
-    localStorage.removeItem(PAT_KEY); patInput.value = ""; remember.checked = false;
-    fileSha = null; posts = []; renderList(); showEmpty();
-    setStatus("已清除本机 PAT 与数据。", "info");
-  }
-
-  // ---- 事件绑定 ----
-  $("loadBtn").addEventListener("click", () => { persistPat(); load(); });
-  $("forgetBtn").addEventListener("click", forgetPat);
-  $("newBtn").addEventListener("click", newPost);
-  $("saveBtn").addEventListener("click", save);
   $("delBtn").addEventListener("click", del);
-  previewToggle.addEventListener("click", togglePreview);
-  [fId, fTitle, fDate, fTags, fExcerpt, fContent].forEach(el => el.addEventListener("input", () => setDirty(true)));
-  fId.addEventListener("input", () => {
-    if (current === -1) {
-      const v = fId.value.trim();
-      if (v && !ID_RE.test(v)) { idHint.textContent = "只允许小写字母、数字、短横线"; idHint.classList.add("bad"); }
-      else if (v && posts.some(x => x.id === v)) { idHint.textContent = "该 id 已存在"; idHint.classList.add("bad"); }
-      else { idHint.textContent = ""; idHint.classList.remove("bad"); }
-    }
-  });
-  window.addEventListener("beforeunload", (e) => { if (isDirty) { e.preventDefault(); e.returnValue = ""; } });
 
-  initPat();
-  renderList();
-  setStatus("填入 PAT 后点「连接并加载」开始编辑。", "info");
+  // ---------- 自动保存 ----------
+  function scheduleAutosave() { clearTimeout(autosaveTimer); autosaveTimer = setTimeout(doAutosave, 800); }
+  function doAutosave() {
+    if (current < 0 && !fId.value && !fTitle.value && !getEditorContent()) return;
+    const key = (current >= 0 ? posts[current].id : (fId.value.trim() || "__new__"));
+    try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ key, fields: { id: fId.value, date: fDate.value, tags: fTags.value, excerpt: fExcerpt.value, status: fStatus.value, title: fTitle.value }, content: getEditorContent(), ts: Date.now() })); autosaveTip.textContent = "已本地自动保存 " + new Date().toLocaleTimeString(); } catch (_) {}
+  }
+  function checkAutosave(id) {
+    let a; try { a = JSON.parse(localStorage.getItem(AUTOSAVE_KEY)); } catch (_) { a = null; }
+    if (a && a.key === id) {
+      autosaveTip.textContent = "";
+      autosaveTip.appendChild(document.createTextNode(`检测到未保存草稿（${new Date(a.ts).toLocaleString()}） `));
+      const r = document.createElement("button"); r.className = "btn small"; r.textContent = "恢复";
+      r.onclick = () => { fId.value = a.fields.id; fDate.value = a.fields.date; fTags.value = a.fields.tags; fExcerpt.value = a.fields.excerpt; fStatus.value = a.fields.status; fTitle.value = a.fields.title; setEditorContent(a.content || ""); autosaveTip.textContent = "已恢复本地草稿"; };
+      const x = document.createElement("button"); x.className = "btn small ghost"; x.textContent = "丢弃"; x.style.marginLeft = "6px"; x.onclick = () => { clearAutosave(); autosaveTip.textContent = ""; };
+      autosaveTip.appendChild(r); autosaveTip.appendChild(x);
+    } else autosaveTip.textContent = "";
+  }
+  function clearAutosave() { try { localStorage.removeItem(AUTOSAVE_KEY); } catch (_) {} }
+  [fTitle, fId, fDate, fTags, fExcerpt, fStatus].forEach(el => el.addEventListener("input", scheduleAutosave));
+  fId.addEventListener("input", () => { if (current === -1) { const v = fId.value.trim(); if (v && !ID_RE.test(v)) { idHint.textContent = "只允许小写字母/数字/短横线"; idHint.classList.add("bad"); } else if (v && posts.some(x => x.id === v)) { idHint.textContent = "该 id 已存在"; idHint.classList.add("bad"); } else { idHint.textContent = ""; idHint.classList.remove("bad"); } } });
+
+  // ---------- 修订历史 + 回滚 ----------
+  const revModal = $("revisionsModal"), revBody = $("revisionsBody");
+  $("revisionsBtn").addEventListener("click", openRevisions);
+  async function openRevisions() {
+    if (!connected) { setStatus("请先连接 GitHub。", "err"); return; }
+    revModal.hidden = false; revBody.innerHTML = '<p class="muted">加载历史…</p>';
+    try {
+      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/commits?path=${encodeURIComponent(DATA_PATH)}&sha=${BRANCH}&per_page=20`, { headers: ghHeaders(true) });
+      if (!res.ok) throw new Error(httpHint(res.status));
+      const list = await res.json();
+      if (!list.length) { revBody.innerHTML = '<p class="muted">暂无历史。</p>'; return; }
+      revBody.innerHTML = "";
+      list.forEach(c => {
+        const row = document.createElement("div"); row.className = "rev-row";
+        const meta = document.createElement("div"); meta.className = "meta";
+        const msg = document.createElement("div"); msg.className = "msg"; msg.textContent = (c.commit.message || "").split("\n")[0];
+        const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = `${new Date(c.commit.author.date).toLocaleString()} · ${c.commit.author.name} · `;
+        const sha = document.createElement("span"); sha.className = "sha"; sha.textContent = c.sha.slice(0, 7); sub.appendChild(sha);
+        meta.appendChild(msg); meta.appendChild(sub);
+        const view = document.createElement("button"); view.className = "btn small"; view.textContent = "查看/恢复";
+        view.onclick = () => viewRevision(c.sha);
+        row.appendChild(meta); row.appendChild(view); revBody.appendChild(row);
+      });
+    } catch (e) { revBody.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}</p>`; }
+  }
+  async function viewRevision(sha) {
+    revBody.innerHTML = '<p class="muted">加载该版本…</p>';
+    try {
+      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${sha}`, { headers: ghHeaders(true) });
+      if (!res.ok) throw new Error(httpHint(res.status));
+      const old = JSON.parse(b64decode((await res.json()).content));
+      const curIds = new Set(posts.map(p => p.id)), oldIds = new Set(old.map(p => p.id));
+      const added = [...oldIds].filter(x => !curIds.has(x)), removed = [...curIds].filter(x => !oldIds.has(x));
+      revBody.innerHTML = "";
+      const bar = document.createElement("div"); bar.className = "rev-row";
+      const info = document.createElement("div"); info.className = "meta";
+      info.innerHTML = `<div class="msg">该版本共 ${old.length} 篇</div><div class="sub">相对当前：此版本独有 ${added.length} 篇，当前独有 ${removed.length} 篇</div>`;
+      const restore = document.createElement("button"); restore.className = "btn primary small"; restore.textContent = "恢复整个 posts.json 到此版本";
+      restore.onclick = async () => {
+        if (!confirm("将用该历史版本整体覆盖当前 posts.json（会提交一次）。确认？")) return;
+        setStatus("回滚中…", "info");
+        try { await commitPosts(JSON.stringify(old, null, 2) + "\n", `revert: content/posts.json → ${sha.slice(0, 7)}`); posts = old; renderList(); setStatus("已回滚到 " + sha.slice(0, 7), "ok"); revModal.hidden = true; }
+        catch (e) { setStatus("回滚失败：" + e.message, "err"); }
+      };
+      bar.appendChild(info); bar.appendChild(restore); revBody.appendChild(bar);
+      const ul = document.createElement("ul"); ul.style.cssText = "margin:8px 0 0;padding-left:18px;color:var(--text-dim);font-size:13px";
+      old.forEach(p => { const li = document.createElement("li"); li.textContent = `${p.date} · ${p.title}`; if (added.includes(p.id)) li.style.color = "var(--ok)"; ul.appendChild(li); });
+      revBody.appendChild(ul);
+    } catch (e) { revBody.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}</p>`; }
+  }
+
+  // ---------- 站点样式预览 ----------
+  const pvModal = $("previewModal"), pvFrame = $("previewFrame");
+  $("previewBtn").addEventListener("click", openPreview);
+  function openPreview() {
+    const p = collect();
+    const bodyHtml = (window.marked ? marked.parse(p.content || "") : (p.content || ""));
+    const safe = window.DOMPurify ? DOMPurify.sanitize(bodyHtml) : bodyHtml;
+    const isDark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const doc = `<!DOCTYPE html><html lang="zh-CN" data-theme="${isDark ? "dark" : "light"}"><head><meta charset="utf-8">
+      <link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="../landing.css"><link rel="stylesheet" href="../light.css">
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/${isDark ? "github-dark" : "github"}.min.css">
+      <style>body{padding-bottom:40px}</style></head>
+      <body class="on-blog"><main id="app"><article class="article"><header class="article-header"><h1>${escapeHtml(p.title || "(无标题)")}</h1>
+      <div class="post-meta"><span>📅 ${escapeHtml(p.date)}</span><span>🏷 ${(p.tags || []).map(escapeHtml).join(" · ")}</span></div></header>
+      <div class="article-body">${safe}</div></article></main>
+      <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"><\/script>
+      <script>try{document.querySelectorAll('.article-body pre code').forEach(b=>hljs.highlightElement(b));}catch(e){}<\/script>
+      </body></html>`;
+    pvModal.hidden = false; pvFrame.srcdoc = doc;
+  }
+  function escapeHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  // ---------- 弹窗关闭 ----------
+  document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", (e) => { if (e.target === m || (e.target.matches && e.target.matches("[data-close]"))) m.hidden = true; }));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => m.hidden = true); });
+
+  // ---------- 启动 ----------
+  if (sessionStorage.getItem(AUTH_KEY) === "1") enterApp(); else showGate();
 })();
