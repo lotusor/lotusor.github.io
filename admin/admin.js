@@ -38,6 +38,7 @@
   let autosaveTimer = null;
   let vdReady = false;         // Vditor 异步初始化完成标志
   let pendingContent = null;   // 就绪前待写入的正文
+  let pendingInsert = null;    // 就绪前待插入的片段（媒体库/图片）
 
   // ---------- 工具 ----------
   function b64decode(b64) { const bin = atob(b64.replace(/\s+/g, "")); const by = Uint8Array.from(bin, c => c.charCodeAt(0)); return new TextDecoder("utf-8").decode(by); }
@@ -121,7 +122,7 @@
     vditorHost.hidden = false; editorEmpty.hidden = true;
     const isDark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
     vd = new Vditor("vditor", {
-      cdn: "https://cdn.jsdelivr.net/npm/vditor@3.11.2",
+      cdn: "https://registry.npmmirror.com/vditor/3.11.2/files",
       mode: "ir",
       lang: "zh_CN",
       theme: isDark ? "dark" : "classic",
@@ -137,23 +138,28 @@
       ],
       upload: { multiple: true, accept: "image/*", handler: onUpload },
       input: () => scheduleAutosave(),
-      after: () => { vdReady = true; if (pendingContent !== null) { vd.setValue(pendingContent); pendingContent = null; } },
+      after: () => { vdReady = true; if (pendingContent !== null) { vd.setValue(pendingContent); pendingContent = null; } if (pendingInsert !== null) { vd.insertValue(pendingInsert); pendingInsert = null; } },
     });
   }
   function setEditorContent(md) { if (vdReady && vd) vd.setValue(md || ""); else pendingContent = md || ""; }
   function getEditorContent() { return (vdReady && vd) ? vd.getValue() : (pendingContent || ""); }
 
+  async function uploadImageToAssets(f) {
+    const ext = ((f.name.split(".").pop() || "png").toLowerCase()).replace(/[^a-z0-9]/g, "") || "png";
+    const name = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const path = `assets/${name}`;
+    const b64 = await fileToB64(f);
+    await ghPut(path, b64, `assets: 上传图片 ${name}`);
+    return { name, url: `${SITE_ORIGIN}/${path}` };
+  }
+
   async function onUpload(files) {
     if (!connected) { setStatus("请先连接 GitHub 再上传图片。", "err"); return; }
     for (const f of files) {
       try {
-        const ext = ((f.name.split(".").pop() || "png").toLowerCase()).replace(/[^a-z0-9]/g, "") || "png";
-        const name = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-        const path = `assets/${name}`;
-        const b64 = await fileToB64(f);
-        await ghPut(path, b64, `assets: 上传图片 ${name}`);
-        const url = `${SITE_ORIGIN}/${path}`;
-        if (vd) vd.insertValue(`![${f.name.replace(/\.[^.]+$/, "")}](${url})\n`);
+        const { name, url } = await uploadImageToAssets(f);
+        const alt = f.name.replace(/\.[^.]+$/, "") || name;
+        if (vdReady && vd) vd.insertValue(`![${alt}](${url})\n`); else pendingInsert = (pendingInsert || "") + `![${alt}](${url})\n`;
         setStatus(`图片已上传：${name}`, "ok");
       } catch (e) { setStatus("图片上传失败：" + e.message, "err"); }
     }
@@ -315,6 +321,42 @@
     } catch (e) { revBody.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}</p>`; }
   }
 
+  // ---------- 媒体库 ----------
+  const mediaModal = $("mediaModal"), mediaGrid = $("mediaGrid"), mediaUpload = $("mediaUpload");
+  const IMG_RE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
+  function fmtSize(b) { return b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(0) + " KB" : (b / 1048576).toFixed(1) + " MB"; }
+  function insertImageMd(md) { ensureVditor(); if (vdReady && vd) vd.insertValue(md); else pendingInsert = (pendingInsert || "") + md; }
+  async function openMediaLibrary() {
+    if (!connected) { setStatus("请先连接 GitHub。", "err"); connectBar.hidden = false; return; }
+    ensureVditor(); mediaModal.hidden = false; loadMediaGrid();
+  }
+  async function loadMediaGrid() {
+    mediaGrid.innerHTML = '<p class="muted">加载 assets/ …</p>';
+    try {
+      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/assets`, { headers: ghHeaders(true) });
+      if (res.status === 404) { mediaGrid.innerHTML = '<p class="muted">assets/ 目录为空。</p>'; return; }
+      if (!res.ok) throw new Error(httpHint(res.status));
+      const items = (await res.json()).filter(x => x.type === "file" && IMG_RE.test(x.name)).sort((a, b) => a.name.localeCompare(b.name));
+      if (!items.length) { mediaGrid.innerHTML = '<p class="muted">还没有图片，点「上传图片」。</p>'; return; }
+      mediaGrid.innerHTML = "";
+      items.forEach(it => {
+        const url = `${SITE_ORIGIN}/${it.path}`;
+        const card = document.createElement("button"); card.type = "button"; card.className = "media-item"; card.title = `${it.name} · ${fmtSize(it.size)}`;
+        card.innerHTML = `<img loading="lazy" src="${url}" alt=""><span class="mi-name">${escapeHtml(it.name)}</span><span class="mi-size">${fmtSize(it.size)}</span>`;
+        card.addEventListener("click", () => { const alt = it.name.replace(/\.[^.]+$/, ""); insertImageMd(`![${alt}](${url})\n`); setStatus("已插入：" + it.name, "ok"); mediaModal.hidden = true; });
+        mediaGrid.appendChild(card);
+      });
+    } catch (e) { mediaGrid.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}</p>`; }
+  }
+  $("mediaBtn").addEventListener("click", openMediaLibrary);
+  $("mediaRefresh").addEventListener("click", loadMediaGrid);
+  mediaUpload.addEventListener("change", async (e) => {
+    const files = [...e.target.files]; e.target.value = "";
+    if (!files.length) return;
+    for (const f of files) { try { const { name } = await uploadImageToAssets(f); setStatus("已上传 " + name, "ok"); } catch (er) { setStatus("上传失败：" + er.message, "err"); } }
+    loadMediaGrid();
+  });
+
   // ---------- 站点样式预览 ----------
   const pvModal = $("previewModal"), pvFrame = $("previewFrame");
   $("previewBtn").addEventListener("click", openPreview);
@@ -325,12 +367,12 @@
     const isDark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
     const doc = `<!DOCTYPE html><html lang="zh-CN" data-theme="${isDark ? "dark" : "light"}"><head><meta charset="utf-8">
       <link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="../landing.css"><link rel="stylesheet" href="../light.css">
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/${isDark ? "github-dark" : "github"}.min.css">
+      <link rel="stylesheet" href="https://registry.npmmirror.com/@highlightjs/cdn-assets/11.9.0/files/styles/${isDark ? "github-dark" : "github"}.min.css">
       <style>body{padding-bottom:40px}</style></head>
       <body class="on-blog"><main id="app"><article class="article"><header class="article-header"><h1>${escapeHtml(p.title || "(无标题)")}</h1>
       <div class="post-meta"><span>📅 ${escapeHtml(p.date)}</span><span>🏷 ${(p.tags || []).map(escapeHtml).join(" · ")}</span></div></header>
       <div class="article-body">${safe}</div></article></main>
-      <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"><\/script>
+      <script src="https://registry.npmmirror.com/@highlightjs/cdn-assets/11.9.0/files/highlight.min.js"><\/script>
       <script>try{document.querySelectorAll('.article-body pre code').forEach(b=>hljs.highlightElement(b));}catch(e){}<\/script>
       </body></html>`;
     pvModal.hidden = false; pvFrame.srcdoc = doc;
