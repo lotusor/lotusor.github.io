@@ -29,6 +29,15 @@
   const fId = $("f_id"), fTitle = $("f_title"), fDate = $("f_date"), fTags = $("f_tags"), fExcerpt = $("f_excerpt"), fStatus = $("f_status");
   const idHint = $("idHint"), autosaveTip = $("autosaveTip");
 
+  // 版本错配防护：浏览器若缓存了旧版 index.html（缺 gate/app/sidePane），给出明确提示而非白屏报错
+  if (!gate || !app || !$("sidePane")) {
+    document.body.innerHTML = '<div style="font-family:system-ui,-apple-system,sans-serif;padding:48px;text-align:center;color:#33414f;line-height:1.8">'
+      + '<h3 style="margin:0 0 10px">检测到旧版本缓存</h3>'
+      + '页面组件与脚本版本不匹配，请<strong>强制刷新</strong>后重试：<br>'
+      + 'Windows / Linux：Ctrl + Shift + R　·　Mac：Cmd + Shift + R</div>';
+    return;
+  }
+
   // ---------- 状态 ----------
   let posts = [];
   let fileSha = null;
@@ -348,9 +357,9 @@
       });
     } catch (e) { mediaGrid.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}</p>`; }
   }
-  $("mediaBtn").addEventListener("click", openMediaLibrary);
-  $("mediaRefresh").addEventListener("click", loadMediaGrid);
-  mediaUpload.addEventListener("change", async (e) => {
+  if ($("mediaBtn")) $("mediaBtn").addEventListener("click", openMediaLibrary);
+  if ($("mediaRefresh")) $("mediaRefresh").addEventListener("click", loadMediaGrid);
+  if (mediaUpload) mediaUpload.addEventListener("change", async (e) => {
     const files = [...e.target.files]; e.target.value = "";
     if (!files.length) return;
     for (const f of files) { try { const { name } = await uploadImageToAssets(f); setStatus("已上传 " + name, "ok"); } catch (er) { setStatus("上传失败：" + er.message, "err"); } }
