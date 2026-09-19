@@ -40,7 +40,7 @@
   },
   {
     "id": "write-a-vite-plugin",
-    "title": "从零写一个 Vite 插件：自动给组件类名加前缀",
+    "title": "为什么我喜欢函数编程",
     "date": "2026-06-28",
     "tags": [
       "前端",
@@ -48,7 +48,8 @@
       "工程化"
     ],
     "excerpt": "理解 Vite 插件就是一串钩子函数，再动手实现一个「自动给类名加项目前缀」的小工具。",
-    "content": "Vite 插件说白了就是一个**带钩子（hook）的对象**。最常用的钩子是 `transform`，模块被加载的时候，它能偷偷改写源码。\n\n## 最小骨架\n\n先写一个能跑的最小版本：\n\n```js\nexport default function myPlugin(options = {}) {\n  return {\n    name: \"vite-plugin-prefix\",\n    transform(code, id) {\n      // 只处理 .vue 文件\n      if (!id.endsWith(\".vue\")) return null;\n      const prefixed = code.replace(/class=\"([^\"]+)\"/g,\n        (_, cls) => `class=\"kb-${cls}\"`);\n      return { code: prefixed, map: null };\n    }\n  };\n}\n```\n\n逻辑很直白：不是 `.vue` 文件就返回 `null`，是的话就把所有 `class` 前面塞一个 `kb-` 前缀。\n\n## 怎么用\n\n```js\n// vite.config.js\nimport prefix from \"./my-plugin\";\nexport default {\n  plugins: [prefix()]\n};\n```\n\n## 几个注意点\n\n1. 钩子返回 `null` 表示「这文件我不碰」，Vite 会继续往下走\n2. 改了源码最好顺便返回新的 `map`，不然 SourceMap 会错位，调试时定位全歪\n3. 插件顺序影响结果，`enforce: \"pre\" | \"post\"` 可以调整先后\n\n写插件最大的乐趣，是发现「原来构建工具也不过是一串函数」。"
+    "content": "Vite 插件说白了就是一个**带钩子（hook）的对象**。最常用的钩子是 `transform`，模块被加载的时候，它能偷偷改写源码。\n\n## 最小骨架\n\n先写一个能跑的最小版本：\n\n```js\nexport default function myPlugin(options = {}) {\n  return {\n    name: \"vite-plugin-prefix\",\n    transform(code, id) {\n      // 只处理 .vue 文件\n      if (!id.endsWith(\".vue\")) return null;\n      const prefixed = code.replace(/class=\"([^\"]+)\"/g,\n        (_, cls) => `class=\"kb-${cls}\"`);\n      return { code: prefixed, map: null };\n    }\n  };\n}\n```\n\n逻辑很直白：不是 `.vue` 文件就返回 `null`，是的话就把所有 `class` 前面塞一个 `kb-` 前缀。\n\n## 怎么用\n\n```js\n// vite.config.js\nimport prefix from \"./my-plugin\";\nexport default {\n  plugins: [prefix()]\n};\n```\n\n## 几个注意点\n\n1. 钩子返回 `null` 表示「这文件我不碰」，Vite 会继续往下走\n2. 改了源码最好顺便返回新的 `map`，不然 SourceMap 会错位，调试时定位全歪\n3. 插件顺序影响结果，`enforce: \"pre\" | \"post\"` 可以调整先后\n\n写插件最大的乐趣，是发现「原来构建工具也不过是一串函数」。\n",
+    "status": "published"
   },
   {
     "id": "love-pure-functions",
