@@ -26,7 +26,7 @@
   },
   {
     "id": "http-cache-explained",
-    "title": "把 HTTP 缓存讲清楚：从强缓存到协商缓存",
+    "title": "学习记录 | 我的博客建设历程",
     "date": "2026-07-12",
     "tags": [
       "前端",
@@ -34,7 +34,8 @@
       "性能"
     ],
     "excerpt": "强缓存不发请求，协商缓存发请求但可能 304。一张表 + 几个 Header 就能记住。",
-    "content": "缓存是前端性能优化的第一道关。先记一句话：**强缓存不询问服务器，协商缓存会询问，但可能拿到 304。**\n\n## 两类缓存，一张表说清\n\n| 类型 | 关键 Header | 是否发请求 | 典型状态码 |\n| --- | --- | --- | --- |\n| 强缓存 | Cache-Control / Expires | 否 | 200 (from disk cache) |\n| 协商缓存 | ETag / Last-Modified | 是 | 304 或 200 |\n\n区别就一个：浏览器到底有没有问服务器一声。\n\n## 强缓存：不问直接用\n\n```http\nCache-Control: max-age=3600, public\nExpires: Wed, 21 Oct 2026 07:28:00 GMT\n```\n\n现代浏览器优先看 `Cache-Control` 的 `max-age`（相对时间）。`Expires` 是绝对时间，容易受时钟漂移影响，基本算老前辈了。\n\n## 协商缓存：问一声，省点流量\n\n强缓存失效后，浏览器会带上条件请求：\n\n```http\nIf-None-Match: \"abc123\"      # 对应响应的 ETag\nIf-Modified-Since: <date>    # 对应响应的 Last-Modified\n```\n\n服务器比对一下，内容没变就回 `304 Not Modified`，不带响应体，传输体积直接省下来。\n\n## 实践建议\n\n- 带 hash 的静态资源（`app.4f3a.js`）用 `max-age=31536000, immutable`，一年不用问\n- HTML 用 `no-cache`，每次走协商，保证及时更新\n- 上线前开 DevTools 的 Network 面板，确认缓存命中情况\n\n这套记住了，面试里被问缓存基本不会慌。"
+    "content": "缓存是前端性能优化的第一道关。先记一句话：**强缓存不询问服务器，协商缓存会询问，但可能拿到 304。**\n\n## 两类缓存，一张表说清\n\n\n| 类型     | 关键 Header             | 是否发请求 | 典型状态码            |\n| -------- | ----------------------- | ---------- | --------------------- |\n| 强缓存   | Cache-Control / Expires | 否         | 200 (from disk cache) |\n| 协商缓存 | ETag / Last-Modified    | 是         | 304 或 200            |\n\n区别就一个：浏览器到底有没有问服务器一声。\n\n## 强缓存：不问直接用\n\n```http\nCache-Control: max-age=3600, public\nExpires: Wed, 21 Oct 2026 07:28:00 GMT\n```\n\n现代浏览器优先看 `Cache-Control` 的 `max-age`（相对时间）。`Expires` 是绝对时间，容易受时钟漂移影响，基本算老前辈了。\n\n## 协商缓存：问一声，省点流量\n\n强缓存失效后，浏览器会带上条件请求：\n\n```http\nIf-None-Match: \"abc123\"      # 对应响应的 ETag\nIf-Modified-Since: <date>    # 对应响应的 Last-Modified\n```\n\n服务器比对一下，内容没变就回 `304 Not Modified`，不带响应体，传输体积直接省下来。\n\n## 实践建议\n\n- 带 hash 的静态资源（`app.4f3a.js`）用 `max-age=31536000, immutable`，一年不用问\n- HTML 用 `no-cache`，每次走协商，保证及时更新\n- 上线前开 DevTools 的 Network 面板，确认缓存命中情况\n",
+    "status": "draft"
   },
   {
     "id": "write-a-vite-plugin",
