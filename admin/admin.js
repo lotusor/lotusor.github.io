@@ -12,11 +12,11 @@
   const SITE_ORIGIN = "https://lotusor.github.io";
   const API = "https://api.github.com";
   const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-  const PASS_HASH = "9de6d2444e21aa89981ff0e5893640d3783b7652b4eaafe88687cadeba95db8c"; // sha256(口令)，见运维指南 §14 轮换方法
+  const PASS_HASH = "ec6ae316659680fe0d285afa46d4cdefeb87314a7b4b896009e03acd6cddb41a"; // sha256('lotus-admin-2026')，见运维指南 §14 轮换方法
   const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
   const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
   const AUTOSAVE_KEY = "lotusor-admin-autosave";
-  const EXPECTED_BUILD = "4";               // 与 index.html 的 data-admin-build 对应，用于版本握手
+  const EXPECTED_BUILD = "5";               // 与 index.html 的 data-admin-build 对应，用于版本握手
 
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
@@ -80,7 +80,7 @@
   gateForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     gateErr.textContent = "";
-    const ok = await tryUnlock(gateInput.value);
+    const ok = await tryUnlock(gateInput.value.trim());
     if (!ok) gateErr.textContent = "口令不正确";
   });
   $("lockBtn").addEventListener("click", () => { sessionStorage.removeItem(AUTH_KEY); location.reload(); });
