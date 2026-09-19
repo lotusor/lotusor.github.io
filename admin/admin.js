@@ -16,7 +16,7 @@
   const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
   const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
   const AUTOSAVE_KEY = "lotusor-admin-autosave";
-  const EXPECTED_BUILD = "5";               // 与 index.html 的 data-admin-build 对应，用于版本握手
+  const EXPECTED_BUILD = "6";               // 与 index.html 的 data-admin-build 对应，用于版本握手
 
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);

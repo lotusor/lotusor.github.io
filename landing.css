@@ -15,6 +15,9 @@
   --dark-text-dim: #5a6a88;
 }
 
+/* hidden 属性必须生效：部分元素(如搜索结果下拉)在 CSS 里显式设了 display，会盖过浏览器 UA 的 [hidden]{display:none} */
+[hidden] { display: none !important; }
+
 /* 覆盖 styles.css 的白色 body 背景，全站深色基底 */
 html, body { background: var(--dark-bg); }
 
