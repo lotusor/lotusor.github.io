@@ -14,7 +14,7 @@
   },
   {
     "id": "markov-text-gen",
-    "title": "30 行 JavaScript 让电脑学会“说胡话”：迷你 Markov 链文本生成器",
+    "title": "学习记录 | 我的博客建设历程",
     "date": "2026-07-20",
     "tags": [
       "JavaScript",
@@ -22,7 +22,8 @@
       "有趣"
     ],
     "excerpt": "不依赖任何库，用一阶马尔可夫链把一段语料「学」成自己的文风，再吐出看似通顺的胡话。",
-    "content": "马尔可夫链的核心思想一句话就能讲完：**下一个词只取决于当前词**。听起来像废话，但它真的能让程序「模仿」出一段文本的风格。\n\n## 思路\n\n拆成三步：\n\n1. 把语料按词切开\n2. 统计「当前词 → 下一个词」的出现频率\n3. 随机游走生成新文本\n\n先忘掉「频率」这回事，粗暴一点：把所有「当前词后面跟过哪些词」记下来，生成的时候随机挑一个。就这么简单。\n\n## 代码\n\n```js\nfunction buildChain(text) {\n  const words = text.split(/\\s+/).filter(Boolean);\n  const chain = {};\n  for (let i = 0; i < words.length - 1; i++) {\n    const cur = words[i];\n    const next = words[i + 1];\n    (chain[cur] = chain[cur] || []).push(next);\n  }\n  return chain;\n}\n\nfunction generate(chain, start, len = 30) {\n  let word = start in chain ? start : Object.keys(chain)[0];\n  const out = [word];\n  for (let i = 0; i < len; i++) {\n    const candidates = chain[word];\n    if (!candidates || !candidates.length) break;\n    word = candidates[Math.floor(Math.random() * candidates.length)];\n    out.push(word);\n  }\n  return out.join(\" \");\n}\n\nconst chain = buildChain(\"代码 是 诗 代码 也是 工具 诗 让人 安静\");\nconsole.log(generate(chain, \"代码\"));\n```\n\n## 效果\n\n喂进去的句子太短，生成结果会比较「repeat」，翻来覆去就那么几个词。真实场景里把一整本小说当语料，效果会惊艳很多，读起来还真像那么回事。\n\n> 小提示：语料越大，生成文本越「像人话」，但也越容易整段抄原文——注意版权。"
+    "content": "马尔可夫链的核心思想一句话就能讲完：**下一个词只取决于当前词**。听起来像废话，但它真的能让程序「模仿」出一段文本的风格。\n\n## 思路\n\n拆成三步：\n\n1. 把语料按词切开\n2. 统计「当前词 → 下一个词」的出现频率\n3. 随机游走生成新文本\n\n先忘掉「频率」这回事，粗暴一点：把所有「当前词后面跟过哪些词」记下来，生成的时候随机挑一个。就这么简单。\n\n## 代码\n\n```js\nfunction buildChain(text) {\n  const words = text.split(/\\s+/).filter(Boolean);\n  const chain = {};\n  for (let i = 0; i < words.length - 1; i++) {\n    const cur = words[i];\n    const next = words[i + 1];\n    (chain[cur] = chain[cur] || []).push(next);\n  }\n  return chain;\n}\n\nfunction generate(chain, start, len = 30) {\n  let word = start in chain ? start : Object.keys(chain)[0];\n  const out = [word];\n  for (let i = 0; i < len; i++) {\n    const candidates = chain[word];\n    if (!candidates || !candidates.length) break;\n    word = candidates[Math.floor(Math.random() * candidates.length)];\n    out.push(word);\n  }\n  return out.join(\" \");\n}\n\nconst chain = buildChain(\"代码 是 诗 代码 也是 工具 诗 让人 安静\");\nconsole.log(generate(chain, \"代码\"));\n```\n\n## 效果\n\n喂进去的句子太短，生成结果会比较「repeat」，翻来覆去就那么几个词。真实场景里把一整本小说当语料，效果会惊艳很多，读起来还真像那么回事。\n\n> 小提示：语料越大，生成文本越「像人话」，但也越容易整段抄原文——注意版权哦。\n",
+    "status": "draft"
   },
   {
     "id": "http-cache-explained",
