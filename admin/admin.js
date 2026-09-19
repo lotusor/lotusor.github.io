@@ -16,6 +16,7 @@
   const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
   const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
   const AUTOSAVE_KEY = "lotusor-admin-autosave";
+  const EXPECTED_BUILD = "4";               // 与 index.html 的 data-admin-build 对应，用于版本握手
 
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
@@ -29,8 +30,8 @@
   const fId = $("f_id"), fTitle = $("f_title"), fDate = $("f_date"), fTags = $("f_tags"), fExcerpt = $("f_excerpt"), fStatus = $("f_status");
   const idHint = $("idHint"), autosaveTip = $("autosaveTip");
 
-  // 版本错配防护：浏览器若缓存了旧版 index.html（缺 gate/app/sidePane），给出明确提示而非白屏报错
-  if (!gate || !app || !$("sidePane")) {
+  // 版本错配防护：浏览器若缓存了旧版 index.html（缺关键 DOM，或 build 号不匹配），给出明确提示而非白屏报错
+  if (!gate || !app || !$("sidePane") || document.body.getAttribute("data-admin-build") !== EXPECTED_BUILD) {
     document.body.innerHTML = '<div style="font-family:system-ui,-apple-system,sans-serif;padding:48px;text-align:center;color:#33414f;line-height:1.8">'
       + '<h3 style="margin:0 0 10px">检测到旧版本缓存</h3>'
       + '页面组件与脚本版本不匹配，请<strong>强制刷新</strong>后重试：<br>'
@@ -58,6 +59,14 @@
   function httpHint(s) { return { 401: "401 未授权：PAT 无效/权限不足（需 Contents 读写）", 403: "403 禁止：速率限制或权限不足", 404: "404 未找到：路径/分支?", 409: "409 冲突：远端已变动，请重新「连接并加载」" }[s] || ("HTTP " + s); }
   async function sha256hex(str) { const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); }
   function ghHeaders(auth) { const h = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }; if (auth) h["Authorization"] = "Bearer " + token(); return h; }
+  function fetchTimeout(url, opts, ms) {
+    ms = ms || 12000;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, Object.assign({}, opts, { signal: ctrl.signal })).finally(() => clearTimeout(timer))
+      .catch(err => { if (err && err.name === "AbortError") throw new Error("请求超时（网络或 GitHub API 无响应），请重试"); throw err; });
+  }
+  function openOnlyModal(modal) { document.querySelectorAll(".modal").forEach(m => { if (m !== modal) m.hidden = true; }); modal.hidden = false; }
 
   // ---------- 口令门 ----------
   async function tryUnlock(pass) {
@@ -93,7 +102,7 @@
     if (!token()) { connectBar.hidden = false; connHint.textContent = "请先填入 PAT。"; return; }
     setStatus("连接 GitHub…", "info");
     try {
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${BRANCH}`, { headers: ghHeaders(true) });
+      const res = await fetchTimeout(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${BRANCH}`, { headers: ghHeaders(true) });
       if (res.status === 404) { posts = []; fileSha = null; }
       else if (!res.ok) throw new Error(httpHint(res.status));
       else { const d = await res.json(); fileSha = d.sha; posts = JSON.parse(b64decode(d.content)); }
@@ -284,9 +293,9 @@
   $("revisionsBtn").addEventListener("click", openRevisions);
   async function openRevisions() {
     if (!connected) { setStatus("请先连接 GitHub。", "err"); return; }
-    revModal.hidden = false; revBody.innerHTML = '<p class="muted">加载历史…</p>';
+    openOnlyModal(revModal); revBody.innerHTML = '<p class="muted">加载历史…</p>';
     try {
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/commits?path=${encodeURIComponent(DATA_PATH)}&sha=${BRANCH}&per_page=20`, { headers: ghHeaders(true) });
+      const res = await fetchTimeout(`${API}/repos/${OWNER}/${REPO}/commits?path=${encodeURIComponent(DATA_PATH)}&sha=${BRANCH}&per_page=20`, { headers: ghHeaders(true) });
       if (!res.ok) throw new Error(httpHint(res.status));
       const list = await res.json();
       if (!list.length) { revBody.innerHTML = '<p class="muted">暂无历史。</p>'; return; }
@@ -307,7 +316,7 @@
   async function viewRevision(sha) {
     revBody.innerHTML = '<p class="muted">加载该版本…</p>';
     try {
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${sha}`, { headers: ghHeaders(true) });
+      const res = await fetchTimeout(`${API}/repos/${OWNER}/${REPO}/contents/${DATA_PATH}?ref=${sha}`, { headers: ghHeaders(true) });
       if (!res.ok) throw new Error(httpHint(res.status));
       const old = JSON.parse(b64decode((await res.json()).content));
       const curIds = new Set(posts.map(p => p.id)), oldIds = new Set(old.map(p => p.id));
@@ -337,12 +346,12 @@
   function insertImageMd(md) { ensureVditor(); if (vdReady && vd) vd.insertValue(md); else pendingInsert = (pendingInsert || "") + md; }
   async function openMediaLibrary() {
     if (!connected) { setStatus("请先连接 GitHub。", "err"); connectBar.hidden = false; return; }
-    ensureVditor(); mediaModal.hidden = false; loadMediaGrid();
+    ensureVditor(); openOnlyModal(mediaModal); loadMediaGrid();
   }
   async function loadMediaGrid() {
-    mediaGrid.innerHTML = '<p class="muted">加载 assets/ …</p>';
+    mediaGrid.innerHTML = '<p class="muted">读取 assets/ …</p>';
     try {
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/assets`, { headers: ghHeaders(true) });
+      const res = await fetchTimeout(`${API}/repos/${OWNER}/${REPO}/contents/assets`, { headers: ghHeaders(true) });
       if (res.status === 404) { mediaGrid.innerHTML = '<p class="muted">assets/ 目录为空。</p>'; return; }
       if (!res.ok) throw new Error(httpHint(res.status));
       const items = (await res.json()).filter(x => x.type === "file" && IMG_RE.test(x.name)).sort((a, b) => a.name.localeCompare(b.name));
@@ -355,7 +364,7 @@
         card.addEventListener("click", () => { const alt = it.name.replace(/\.[^.]+$/, ""); insertImageMd(`![${alt}](${url})\n`); setStatus("已插入：" + it.name, "ok"); mediaModal.hidden = true; });
         mediaGrid.appendChild(card);
       });
-    } catch (e) { mediaGrid.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}</p>`; }
+    } catch (e) { mediaGrid.innerHTML = `<p class="muted" style="color:var(--danger)">${e.message}（点右上「刷新」重试）</p>`; }
   }
   if ($("mediaBtn")) $("mediaBtn").addEventListener("click", openMediaLibrary);
   if ($("mediaRefresh")) $("mediaRefresh").addEventListener("click", loadMediaGrid);
@@ -384,7 +393,7 @@
       <script src="https://registry.npmmirror.com/@highlightjs/cdn-assets/11.9.0/files/highlight.min.js"><\/script>
       <script>try{document.querySelectorAll('.article-body pre code').forEach(b=>hljs.highlightElement(b));}catch(e){}<\/script>
       </body></html>`;
-    pvModal.hidden = false; pvFrame.srcdoc = doc;
+    openOnlyModal(pvModal); pvFrame.srcdoc = doc;
   }
   function escapeHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
