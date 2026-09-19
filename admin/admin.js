@@ -16,7 +16,7 @@
   const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
   const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
   const AUTOSAVE_KEY = "lotusor-admin-autosave";
-  const EXPECTED_BUILD = "7";               // 与 index.html 的 data-admin-build 对应，用于版本握手
+  const EXPECTED_BUILD = "8";               // 与 index.html 的 data-admin-build 对应，用于版本握手
 
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
@@ -193,6 +193,7 @@
     current = idx; const p = posts[idx];
     sidePane.hidden = false;
     ensureVditor();
+    fTitle.value = p.title || "";
     fId.value = p.id || ""; fId.readOnly = true; idHint.textContent = "（已有文章，改 id 会使旧链接失效）"; idHint.classList.remove("bad");
     fDate.value = p.date || ""; fTags.value = (p.tags || []).join(", "); fExcerpt.value = p.excerpt || ""; fStatus.value = p.status === "draft" ? "draft" : "published";
     setEditorContent(p.content || "");
@@ -201,6 +202,7 @@
   }
   function newPost() {
     current = -1; sidePane.hidden = false; ensureVditor();
+    fTitle.value = "";
     fId.value = ""; fId.readOnly = false; idHint.textContent = ""; idHint.classList.remove("bad");
     fDate.value = new Date().toISOString().slice(0, 10); fTags.value = ""; fExcerpt.value = ""; fStatus.value = "draft";
     setEditorContent("");
