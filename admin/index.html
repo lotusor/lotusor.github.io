@@ -6,9 +6,9 @@
   <title>文章编辑 · lotus 博客后台</title>
   <meta name="robots" content="noindex,nofollow" />
   <link rel="stylesheet" href="https://registry.npmmirror.com/vditor/3.11.2/files/dist/index.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/vditor@3.11.2/dist/index.css'" />
-  <link rel="stylesheet" href="admin.css?v=6" />
+  <link rel="stylesheet" href="admin.css?v=7" />
 </head>
-<body data-admin-build="6">
+<body data-admin-build="7">
 
   <!-- ========== 口令门 ========== -->
   <div class="gate" id="gate">
@@ -31,6 +31,7 @@
         <span class="conn-dot" id="connDot" title="GitHub 连接状态"></span>
       </div>
       <div class="tb-right">
+        <button class="btn primary small" id="publishDraftsBtn" type="button" hidden>发布草稿<span class="draft-badge" id="draftCount"></span></button>
         <button class="btn ghost" id="mediaBtn" type="button">媒体库</button>
         <button class="btn ghost" id="revisionsBtn" type="button">修订历史</button>
         <button class="btn ghost" id="previewBtn" type="button">预览</button>
@@ -74,7 +75,7 @@
           <label class="fld"><span>标题 title</span>
             <input id="f_title" type="text" placeholder="文章标题" />
           </label>
-          <label class="fld"><span>状态</span>
+          <label class="fld"><span>状态（由下方按钮设定）</span>
             <select id="f_status">
               <option value="published">已发布</option>
               <option value="draft">草稿（前台不显示）</option>
@@ -94,9 +95,9 @@
             <textarea id="f_excerpt" rows="3" placeholder="显示在列表卡片"></textarea>
           </label>
           <div class="side-actions">
-            <button class="btn primary block" id="saveBtn" type="button">保存到 GitHub</button>
+            <button class="btn primary block" id="saveBtn" type="button">发布 / 更新</button>
             <button class="btn ghost block" id="saveDraftBtn" type="button">存为草稿</button>
-            <button class="btn danger ghost block" id="delBtn" type="button">删除此篇</button>
+            <button class="btn danger ghost block" id="delBtn" type="button">删除此篇（即时提交）</button>
           </div>
           <div class="autosave-tip" id="autosaveTip"></div>
         </div>

@@ -16,7 +16,7 @@
   const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
   const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
   const AUTOSAVE_KEY = "lotusor-admin-autosave";
-  const EXPECTED_BUILD = "6";               // 与 index.html 的 data-admin-build 对应，用于版本握手
+  const EXPECTED_BUILD = "7";               // 与 index.html 的 data-admin-build 对应，用于版本握手
 
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
@@ -131,6 +131,11 @@
       li.addEventListener("click", () => select(idx));
       postListEl.appendChild(li);
     });
+    // 批量发布按钮：仅在有草稿时显示，并标注数量
+    const draftN = posts.filter(p => p.status === "draft").length;
+    const pdBtn = $("publishDraftsBtn"), dcEl = $("draftCount");
+    if (pdBtn) pdBtn.hidden = draftN === 0;
+    if (dcEl) dcEl.textContent = draftN ? " (" + draftN + ")" : "";
   }
   searchList.addEventListener("input", renderList);
 
@@ -224,17 +229,21 @@
   // ---------- 保存 ----------
   async function save(asDraft) {
     if (!connected) { setStatus("请先连接 GitHub。", "err"); connectBar.hidden = false; return; }
-    if (asDraft) fStatus.value = "draft";
+    fStatus.value = asDraft ? "draft" : "published";   // 按钮即意图，消除“下拉/按钮”状态混用
     const p = collect();
     const err = validate(p);
     if (err) { setStatus("校验未通过：" + err, "err"); return; }
-    if (current === -1) { posts.push(p); current = posts.length - 1; }
-    else { posts[current] = p; }
+    // 先在副本上计算，提交成功后才落到本地，避免失败时本地状态与远端不一致
+    const next = posts.slice();
+    let newIndex;
+    if (current === -1) { next.push(p); newIndex = next.length - 1; }
+    else { next[current] = p; newIndex = current; }
     setStatus("提交中…", "info");
     try {
-      await commitPosts(JSON.stringify(posts, null, 2) + "\n", `content: ${p.status === "draft" ? "草稿" : "更新"}《${p.title}》(${p.id})`);
+      await commitPosts(JSON.stringify(next, null, 2) + "\n", `content: ${p.status === "draft" ? "存草稿" : "发布/更新"}《${p.title}》(${p.id})`);
+      posts = next; current = newIndex;   // 成功后才更新本地
       renderList(); clearAutosave();
-      setStatus(`已保存到 main（${p.status === "draft" ? "草稿" : "已发布"}）。Pages 约 1–2 分钟生效。`, "ok");
+      setStatus(`已${p.status === "draft" ? "存为草稿" : "发布/更新"}到 main。Pages 约 1–2 分钟生效。`, "ok");
     } catch (e) { setStatus("保存失败：" + e.message, "err"); }
   }
   $("saveBtn").addEventListener("click", () => save(false));
@@ -259,12 +268,31 @@
 
   function del() {
     if (current < 0) return; const p = posts[current];
-    if (!confirm(`确认删除《${p.title}》(${p.id})？\n（需点“保存到 GitHub”才会真正提交删除。）`)) return;
-    posts.splice(current, 1); current = -1; sidePane.hidden = true; setEditorContent("");
-    renderList(); autosaveTip.textContent = "";
-    setStatus("已从列表删除，记得点“保存到 GitHub”提交。", "info");
+    if (!confirm(`确认删除《${p.title}》(${p.id})？\n将直接提交到 GitHub（此操作会写入 main）。`)) return;
+    const next = posts.slice(); next.splice(current, 1);
+    setStatus("删除提交中…", "info");
+    commitPosts(JSON.stringify(next, null, 2) + "\n", `content: 删除《${p.title}》(${p.id})`)
+      .then(() => { posts = next; current = -1; sidePane.hidden = true; setEditorContent(""); renderList(); autosaveTip.textContent = ""; setStatus("已删除并提交到 main。", "ok"); })
+      .catch(e => setStatus("删除失败：" + e.message, "err"));
   }
   $("delBtn").addEventListener("click", del);
+
+  // 批量发布当前所有草稿
+  async function publishAllDrafts() {
+    if (!connected) { setStatus("请先连接 GitHub。", "err"); connectBar.hidden = false; return; }
+    const idxs = posts.map((p, i) => p.status === "draft" ? i : -1).filter(i => i >= 0);
+    if (!idxs.length) { setStatus("当前没有草稿。", "info"); return; }
+    const titles = idxs.map(i => posts[i].title || posts[i].id).join("、");
+    if (!confirm(`将把 ${idxs.length} 篇草稿发布：\n${titles}\n\n确认？`)) return;
+    const next = posts.map(p => p.status === "draft" ? Object.assign({}, p, { status: "published" }) : p);
+    setStatus("批量发布中…", "info");
+    try {
+      await commitPosts(JSON.stringify(next, null, 2) + "\n", `content: 批量发布 ${idxs.length} 篇草稿`);
+      posts = next; renderList();
+      setStatus(`已发布 ${idxs.length} 篇草稿。Pages 约 1–2 分钟生效。`, "ok");
+    } catch (e) { setStatus("批量发布失败：" + e.message, "err"); }
+  }
+  if ($("publishDraftsBtn")) $("publishDraftsBtn").addEventListener("click", publishAllDrafts);
 
   // ---------- 自动保存 ----------
   function scheduleAutosave() { clearTimeout(autosaveTimer); autosaveTimer = setTimeout(doAutosave, 800); }
@@ -277,9 +305,9 @@
     let a; try { a = JSON.parse(localStorage.getItem(AUTOSAVE_KEY)); } catch (_) { a = null; }
     if (a && a.key === id) {
       autosaveTip.textContent = "";
-      autosaveTip.appendChild(document.createTextNode(`检测到未保存草稿（${new Date(a.ts).toLocaleString()}） `));
+      autosaveTip.appendChild(document.createTextNode(`检测到未保存的本地修改（${new Date(a.ts).toLocaleString()}） `));
       const r = document.createElement("button"); r.className = "btn small"; r.textContent = "恢复";
-      r.onclick = () => { fId.value = a.fields.id; fDate.value = a.fields.date; fTags.value = a.fields.tags; fExcerpt.value = a.fields.excerpt; fStatus.value = a.fields.status; fTitle.value = a.fields.title; setEditorContent(a.content || ""); autosaveTip.textContent = "已恢复本地草稿"; };
+      r.onclick = () => { fId.value = a.fields.id; fDate.value = a.fields.date; fTags.value = a.fields.tags; fExcerpt.value = a.fields.excerpt; fStatus.value = a.fields.status; fTitle.value = a.fields.title; setEditorContent(a.content || ""); autosaveTip.textContent = "已恢复本地修改"; };
       const x = document.createElement("button"); x.className = "btn small ghost"; x.textContent = "丢弃"; x.style.marginLeft = "6px"; x.onclick = () => { clearAutosave(); autosaveTip.textContent = ""; };
       autosaveTip.appendChild(r); autosaveTip.appendChild(x);
     } else autosaveTip.textContent = "";
