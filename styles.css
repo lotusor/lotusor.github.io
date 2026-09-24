@@ -8,9 +8,16 @@
   --brand: #2f6fed;
   --brand-soft: #eaf1ff;
   --accent: #0fae8e;
+  --focus-ring: #2f6fed; /* 键盘焦点环（:focus-visible），深浅主题通用 */
   --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 6px 20px rgba(16, 24, 40, .06);
   --radius: 14px;
   --maxw: 920px;
+}
+
+/* 键盘可达性：可见焦点环（鼠标点击不触发，仅键盘导航时出现） */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 * { box-sizing: border-box; }

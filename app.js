@@ -95,6 +95,24 @@ function socialLink(s) {
     </a>`;
 }
 
+/* QQ 二维码面板：点击/回车切换展开（触屏与键盘可达；桌面 hover 展开保留），Esc 关闭 */
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".qq-icon-btn");
+  if (!btn) return;
+  const wrap = btn.closest(".qq-wrap");
+  if (!wrap) return;
+  const open = wrap.classList.toggle("is-open");
+  btn.setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".qq-wrap.is-open").forEach(wrap => {
+    wrap.classList.remove("is-open");
+    const btn = wrap.querySelector(".qq-icon-btn");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  });
+});
+
 /* ---------------------- 封面（首页） ---------------------- */
 function viewLanding() {
   document.body.classList.remove("on-blog");
@@ -109,11 +127,11 @@ function viewLanding() {
       <div class="cover-socials">
         ${socials}
         <div class="qq-wrap">
-          <div class="qq-icon-btn glass" title="QQ 二维码" aria-label="QQ 二维码">
+          <button class="qq-icon-btn glass" type="button" title="QQ 二维码" aria-label="QQ 二维码" aria-expanded="false" aria-controls="qqQrPanel">
             <img src="https://im.qq.com/favicon.ico" alt="QQ" loading="lazy" data-fallback="svg" />
-          </div>
-          <div class="qq-qr-panel">
-            <img src="assets/qq-qr.png" alt="QQ 二维码" />
+          </button>
+          <div class="qq-qr-panel" id="qqQrPanel">
+            <img src="assets/qq-qr.png" alt="QQ 二维码" loading="lazy" />
           </div>
         </div>
       </div>
@@ -175,6 +193,11 @@ function viewPost(id) {
       <div class="article-body">${renderMarkdown(p.content)}</div>
     </article>
   `;
+  // 文章图片懒加载（正文图均在首屏以下，防解码抢占首屏资源）
+  $app.querySelectorAll(".article-body img").forEach(img => {
+    img.loading = "lazy";
+    img.decoding = "async";
+  });
   highlightWithin($app);
 }
 
@@ -564,7 +587,12 @@ function renderHistory() {
   renderHistory(); // 首次渲染（读取本地历史）
 })();
 
-/* ---------------------- 音乐抽屉：选项卡 + 收起/展开 + 拖拽移动 ---------------------- */
+/* ---------------------- 音乐抽屉：选项卡 + 收起/展开 + 拖拽移动 ----------------------
+   收起态（圆形按钮）与展开态（抽屉把手）均可拖拽，位置存 localStorage。
+   展开方向按按钮当前所在位置自适应：按钮中心在左半屏 → 向右展开（左缘对齐），
+   在右半屏 → 向左展开（右缘对齐）；垂直方向顶边对齐，越界由 clamp 收回视口。
+   收起时按钮回到抽屉靠屏幕中心一侧的边缘（左半屏回左上角 / 右半屏回右上角），
+   与展开规则互逆，保证「展开 → 收起」按钮回到原位。 */
 (function () {
   const drawer   = document.getElementById("musicDrawer");
   const body     = document.getElementById("drawerBody");
@@ -576,8 +604,13 @@ function renderHistory() {
   const POS_KEY = "lotusor-drawer-pos";
   const COL_KEY = "lotusor-drawer-collapsed";
   const TAB_KEY = "lotusor-drawer-tab";
+  const MARGIN = 8;          // 组件距视口边缘的最小间距
+  const DRAG_THRESHOLD = 4;  // 收起态位移超过该值才视为拖拽，否则放行为点击
   const readJSON = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (_) { return d; } };
   const write = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+  const vw = () => window.innerWidth;
+  const vh = () => window.innerHeight;
+  const isCollapsed = () => drawer.getAttribute("data-collapsed") === "true";
 
   /* ---- 选项卡 ---- */
   const tabs   = Array.from(drawer.querySelectorAll(".dtab"));
@@ -593,26 +626,17 @@ function renderHistory() {
   }
   tabs.forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
 
-  /* ---- 位置（拖拽） ---- */
-  function clamp(x, y) {
-    const r = body.getBoundingClientRect();
-    const w = r.width || 300, h = r.height || 360;
-    return [
-      Math.max(8, Math.min(x, window.innerWidth  - w - 8)),
-      Math.max(8, Math.min(y, window.innerHeight - h - 8)),
-    ];
-  }
+  /* ---- 位置：以组件当前态的实际尺寸做视口夹取 ---- */
   function setPos(x, y, save) {
-    const [cx, cy] = clamp(x, y);
+    const w = drawer.offsetWidth  || 48;
+    const h = drawer.offsetHeight || 48;
+    const cx = Math.max(MARGIN, Math.min(x, vw() - w - MARGIN));
+    const cy = Math.max(MARGIN, Math.min(y, vh() - h - MARGIN));
     drawer.style.left = cx + "px";
     drawer.style.top  = cy + "px";
     drawer.style.right = "auto";
     drawer.style.bottom = "auto";
     if (save) write(POS_KEY, JSON.stringify({ x: cx, y: cy }));
-  }
-  function applySavedPos() {
-    const p = readJSON(POS_KEY, null);
-    if (p && typeof p.x === "number" && typeof p.y === "number") setPos(p.x, p.y, false);
   }
 
   /* ---- 收起 / 展开 ---- */
@@ -620,44 +644,106 @@ function renderHistory() {
     drawer.setAttribute("data-collapsed", v ? "true" : "false");
     write(COL_KEY, JSON.stringify(v));
   }
-  function expand() { setCollapsed(false); }
-  if (collapseBtn) collapseBtn.addEventListener("click", () => setCollapsed(true));
-  if (launcher) launcher.addEventListener("click", expand);
+  function expand() {
+    if (!isCollapsed() || !launcher) return;
+    const lr = launcher.getBoundingClientRect(); // 展开前按钮的实际位置（兼容 right/bottom 默认锚定）
+    setCollapsed(false);
+    // 切换后同步测量抽屉实际尺寸（同一帧内完成，无闪烁）
+    const w = drawer.offsetWidth, h = drawer.offsetHeight;
+    const toRight = (lr.left + lr.width / 2) < vw() / 2;
+    setPos(toRight ? lr.left : lr.right - w, lr.top, true);
+  }
+  function collapse() {
+    if (isCollapsed()) return;
+    const dr = drawer.getBoundingClientRect();
+    const lw = (launcher && launcher.offsetWidth) || 48; // 展开态按钮隐藏，offsetWidth 为 0，回退 CSS 固定尺寸
+    const onLeft = (dr.left + dr.width / 2) < vw() / 2;
+    const x = onLeft ? dr.left : dr.right - lw;
+    setCollapsed(true);
+    setPos(x, dr.top, true);
+  }
+  if (collapseBtn) collapseBtn.addEventListener("click", collapse);
 
-  /* ---- 拖拽把手 ---- */
+  /* ---- 拖拽（展开态拖把手 / 收起态拖按钮本体） ---- */
   let drag = null;
+  let suppressClick = false; // 收起态拖拽结束后的 click 不再触发展开
+  /* ax/ay：拖拽锚点坐标（默认当前事件坐标）。收起态从 pointermove 越过阈值才启动拖拽，
+     此时事件坐标已偏离按下点，必须显式传入 pointerdown 坐标，否则组件落点整体偏移。 */
+  function startDrag(e, ax, ay) {
+    drawer.classList.add("is-dragging"); // 剥离按钮 hover 位移，保证拖拽基准坐标稳定
+    const r = drawer.getBoundingClientRect();
+    drag = { sx: ax != null ? ax : e.clientX, sy: ay != null ? ay : e.clientY, bx: r.left, by: r.top };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  }
+  function moveDrag(e) {
+    if (!drag) return;
+    setPos(drag.bx + e.clientX - drag.sx, drag.by + e.clientY - drag.sy, false);
+  }
+  function endDrag(e) {
+    if (!drag) return;
+    drag = null;
+    drawer.classList.remove("is-dragging");
+    const r = drawer.getBoundingClientRect();
+    setPos(r.left, r.top, true);
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+
   if (handle) {
     handle.addEventListener("pointerdown", (e) => {
       if (e.target.closest(".drawer-collapse")) return;
-      const r = drawer.getBoundingClientRect();
-      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-      drawer.classList.add("is-dragging");
-      try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+      startDrag(e);
+    });
+    handle.addEventListener("pointermove", moveDrag);
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+  }
+
+  if (launcher) {
+    let down = null;
+    launcher.addEventListener("pointerdown", (e) => {
+      down = { x: e.clientX, y: e.clientY };
+      suppressClick = false;
+      // 立即捕获指针：鼠标没有隐式捕获，移出按钮后 pointermove 须仍派发给按钮才能判定拖拽
+      try { launcher.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault();
     });
-    handle.addEventListener("pointermove", (e) => {
-      if (!drag) return;
-      setPos(e.clientX - drag.dx, e.clientY - drag.dy, false);
+    launcher.addEventListener("pointermove", (e) => {
+      if (!down) return;
+      if (!drag) {
+        if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < DRAG_THRESHOLD) return;
+        suppressClick = true;
+        startDrag(e, down.x, down.y); // 锚定按下点，而非阈值触发点
+      }
+      moveDrag(e);
     });
-    const end = (e) => {
-      if (!drag) return;
-      drag = null;
-      drawer.classList.remove("is-dragging");
-      const r = drawer.getBoundingClientRect();
-      setPos(r.left, r.top, true);
-      try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+    const up = (e) => {
+      down = null;
+      if (drag) endDrag(e);
+      else { try { launcher.releasePointerCapture(e.pointerId); } catch (_) {} }
     };
-    handle.addEventListener("pointerup", end);
-    handle.addEventListener("pointercancel", end);
+    launcher.addEventListener("pointerup", up);
+    launcher.addEventListener("pointercancel", up);
+    launcher.addEventListener("click", () => {
+      if (suppressClick) { suppressClick = false; return; }
+      expand();
+    });
   }
-  window.addEventListener("resize", () => {
-    if (drawer.style.left) { const r = drawer.getBoundingClientRect(); setPos(r.left, r.top, true); }
-  });
 
-  /* ---- 初始化 ---- */
-  applySavedPos();
+  /* ---- 视口或组件尺寸变化时收回视口（如切 Tab / 播放器加载后高度变化） ---- */
+  function keepInViewport() {
+    if (!drawer.style.left) return;
+    const r = drawer.getBoundingClientRect();
+    setPos(r.left, r.top, false);
+  }
+  window.addEventListener("resize", keepInViewport);
+  if (window.ResizeObserver) new ResizeObserver(keepInViewport).observe(drawer);
+
+  /* ---- 初始化：先恢复状态再应用位置（位置语义随收起/展开态而定） ---- */
   setCollapsed(readJSON(COL_KEY, false) === true);
+  const p = readJSON(POS_KEY, null);
+  if (p && typeof p.x === "number" && typeof p.y === "number") setPos(p.x, p.y, false);
   showTab(readJSON(TAB_KEY, "play"));
 
-  window.__musicDrawer = { showTab, expand, setCollapsed };
+  window.__musicDrawer = { showTab, expand, collapse };
 })();

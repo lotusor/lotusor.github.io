@@ -14,7 +14,7 @@ html[data-theme="light"] {
   --dark-border:      rgba(70, 110, 190, .16);
   --dark-text:        #38445a;              /* 正文 */
   --dark-text-bright: #0f1830;             /* 标题/强调文本 */
-  --dark-text-dim:    #7a8699;             /* 次要文本 */
+  --dark-text-dim:    #5d6a80;             /* 次要文本（≥4.5:1，原 #7a8699 仅 3.3:1） */
   /* 派生语义（供组件与后续复用） */
   --panel-bg:         rgba(255, 255, 255, .9);
   --panel-border:     rgba(70, 110, 200, .18);

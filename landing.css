@@ -12,7 +12,7 @@
   --dark-border: rgba(70, 110, 190, .18);
   --dark-text: #b8c4d8;
   --dark-text-bright: #dde8ff;
-  --dark-text-dim: #5a6a88;
+  --dark-text-dim: #7c8ca8; /* 11.5~13px 小字用于正文信息，需 ≥4.5:1（原 #5a6a88 仅 3.6:1） */
 }
 
 /* hidden 属性必须生效：部分元素(如搜索结果下拉)在 CSS 里显式设了 display，会盖过浏览器 UA 的 [hidden]{display:none} */
@@ -375,14 +375,15 @@ body.on-blog .site-header {
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
+  display: grid; place-items: center;
+  padding: 0;                 /* button 元素重置（原为 div） */
+  font: inherit;
   background: rgba(14, 22, 42, .55);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   backdrop-filter: blur(16px) saturate(140%);
   border: 1px solid rgba(70, 110, 220, .2);
   box-shadow: 0 4px 20px rgba(0, 0, 0, .25);
-  cursor: default;
+  cursor: pointer;
   transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
   flex-shrink: 0;
   position: relative;
@@ -418,12 +419,15 @@ body.on-blog .site-header {
   display: block;
 }
 
-.qq-wrap:hover .qq-icon-btn {
+/* hover（桌面指针）与 is-open（点击/键盘切换）共用展开样式——触屏无 hover，靠点击可达 */
+.qq-wrap:hover .qq-icon-btn,
+.qq-wrap.is-open .qq-icon-btn {
   transform: translateY(-4px) scale(1.05);
   border-color: rgba(70, 110, 220, .5);
   box-shadow: 0 8px 28px rgba(70, 110, 220, .2), 0 4px 16px rgba(0, 0, 0, .3);
 }
-.qq-wrap:hover .qq-qr-panel {
+.qq-wrap:hover .qq-qr-panel,
+.qq-wrap.is-open .qq-qr-panel {
   width: 164px;
   opacity: 1;
   margin-left: -8px;
@@ -783,7 +787,8 @@ body.on-blog .blog-head { padding-top: 72px; }
   .social { width: 46px; height: 46px; }
   .social img { width: 22px; height: 22px; }
   .my-think { padding: 11px 30px; font-size: 12.5px; letter-spacing: 3px; }
-  .qq-wrap:hover .qq-qr-panel { width: 138px; }
+  .qq-wrap:hover .qq-qr-panel,
+  .qq-wrap.is-open .qq-qr-panel { width: 138px; }
   .qq-qr-panel img { height: 112px; }
   .site-header { padding: 0 16px; }
   .site-footer { padding: 18px 16px; }
@@ -840,8 +845,10 @@ html.theme-anim .article-body pre, html.theme-anim .article-body code {
 /* 收起态 ↔ 展开态 */
 #musicDrawer[data-collapsed="true"] .drawer-body { display: none; }
 #musicDrawer[data-collapsed="false"] .music-launcher { display: none; }
+/* 收起态容器收缩到按钮尺寸：位置锚点即按钮本身，展开方向由 app.js 按屏幕半边决定 */
+#musicDrawer[data-collapsed="true"] { width: auto; }
 
-/* 悬浮圆形按钮（收起时可见） */
+/* 悬浮圆形按钮（收起时可见，可点击展开、可按住拖动） */
 .music-launcher {
   width: 48px; height: 48px;
   display: grid; place-items: center;
@@ -849,7 +856,8 @@ html.theme-anim .article-body pre, html.theme-anim .article-body code {
   background: rgba(14, 22, 42, .72);
   border: 1px solid rgba(70, 110, 220, .28);
   color: var(--dark-text-bright);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none; /* 指针拖拽需要禁用浏览器手势 */
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   backdrop-filter: blur(14px) saturate(140%);
   box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
@@ -868,7 +876,9 @@ html.theme-anim .article-body pre, html.theme-anim .article-body code {
   overflow: hidden;
   color: var(--dark-text);
 }
-#musicDrawer.is-dragging .drawer-body { user-select: none; }
+/* 拖拽中：禁选中、按钮去 hover 位移（保证拖拽基准坐标稳定） */
+#musicDrawer.is-dragging { user-select: none; }
+#musicDrawer.is-dragging .music-launcher { transform: none; transition: none; cursor: grabbing; }
 
 /* 拖拽把手 */
 .drawer-handle {
@@ -954,4 +964,22 @@ html.theme-anim .article-body pre, html.theme-anim .article-body code {
 @media (max-width: 680px) {
   .music-drawer { width: 268px; right: 12px; bottom: 12px; }
   .drawer-panels { max-height: 46vh; }
+}
+
+/* ==================== 无障碍：prefers-reduced-motion ====================
+   原则 A7——减少动态效果时停掉所有装饰性动画，内容与功能一项不少。
+   注意：幕布过渡依赖 animationend 事件触发页面渲染回调，只能缩短时长不能 animation:none，
+   否则路由切换会卡死（callback 永不执行）。 */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .cover::before,
+  body.on-blog::before { animation: none; }   /* 背景漂浮改为静态渐变 */
+  .loader-bar span { animation: none; }
+  .content-fade-in { animation: none; }
+  .dpanel.is-active,
+  .ms-inline .ms-results,
+  .history-panel { animation: none; }         /* 面板弹出改为瞬时 */
+  .qq-qr-panel { transition-duration: .01ms; } /* 二维码展开改为瞬时 */
+  .page-curtain--enter,
+  .page-curtain--exit { animation-duration: .01ms; }
 }
