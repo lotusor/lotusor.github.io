@@ -75,5 +75,16 @@
     ],
     "excerpt": "「fix typo」「再来一次」堆了一屏？rebase -i 帮你把提交压成一条干净的故事线。",
     "content": "只要本地分支还没推到远端，历史随便怎么收拾都行。交互式 rebase 是我最常用的整理工具。\n\n## 启动交互式 rebase\n\n```bash\ngit rebase -i HEAD~4\n```\n\n会打开一个编辑器，列出最近 4 个提交：\n\n```\npick a1b2c3 添加登录接口\npick d4e5f6 fix typo\npick 7a8b9c 补充单元测试\npick 0d1e2f 再来一次\n```\n\n一眼就能看出问题：`fix typo`、`再来一次` 这种提交，留着只会污染历史。\n\n## 常用操作\n\n- `pick` → 保留\n- `squash` / `fixup` → 合并到上一个提交（fixup 丢弃提交信息）\n- `reword` → 改提交信息\n- `drop` → 删除该提交\n\n把后三个改成 `fixup`，保存退出，一条干净利落的提交就压出来了。\n\n## 黄金法则\n\n> **只 rebase 你自己的、还没推送到公共分支的提交。** 已经推给别人、且别人基于它工作的历史，千万别动——那会制造「分叉的真相」。\n\n整理完的历史就像一篇排版好的文章，别人一眼能看懂你为什么这么改。"
+  },
+  {
+    "id": "my-acm-memory",
+    "title": "以此纪念我的ACM生涯（占坑）",
+    "date": "2026-09-26",
+    "tags": [
+      "ACM"
+    ],
+    "excerpt": "一些遗憾，一些遐想，一些感受",
+    "content": "\n",
+    "status": "published"
   }
 ]
