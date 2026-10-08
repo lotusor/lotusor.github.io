@@ -69,6 +69,8 @@
       <!-- 面板 -->
       <div class="drawer-panels">
         <section class="dpanel is-active" data-panel="play" role="tabpanel">
+          <!-- auto-pause-on-hidden="false"：NMP v3 默认 true，文档一进 hidden 就自行 pause()，
+               切标签页/最小化时音乐会被直接掐断；保活与回前台自愈见 app.js「音乐后台保活」段。 -->
           <nmp-player
             song-id="2127009514"
             api-base-url="https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php"
@@ -76,6 +78,7 @@
             layout="compact"
             embed="true"
             lyric="true"
+            auto-pause-on-hidden="false"
             storage-key="lotusor-blog"></nmp-player>
         </section>
 

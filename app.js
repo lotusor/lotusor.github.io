@@ -587,6 +587,61 @@ function renderHistory() {
   renderHistory(); // 首次渲染（读取本地历史）
 })();
 
+/* ---------------------- 音乐后台保活（切标签页 / 最小化 / bfcache 回到本页） ----------------------
+   NMP v3 的 auto-pause-on-hidden 默认为 true：document 一转入 hidden，播放器内部就自己 pause()，
+   切走标签页或最小化瞬间音乐即断（index.html 已显式写 false 关掉这条）。
+   关掉后「恢复」的责任转到我们这边：部分环境（安卓 Chrome、iOS Safari、Edge 睡眠标签）仍会自行
+   挂起后台音频，且挂起时不派发 pause 事件、播放器内部的 isPlaying 会一直停在 true，光看状态看不出来。
+   所以回到前台先让音频跑 PROBE_MS，只要 currentTime 没有前进就补一次 play()。
+   播放意图只由事件口径维护：nmpv3:pause（含系统通知栏/媒体键触发）一律视为用户主动暂停，绝不抢播。 */
+(function () {
+  const PROBE_MS = 700, RETRY_MAX = 3;
+  let shouldResume = false, timer = null;
+
+  function playerState() {
+    try {
+      const p = getPlayerEl();
+      return p && p.getState ? p.getState() : null;
+    } catch (_) { return null; }
+  }
+
+  function stopProbe() { if (timer) { clearTimeout(timer); timer = null; } }
+
+  function heal(left) {
+    if (!shouldResume || document.hidden) return;
+    const s0 = playerState();
+    if (!s0 || !s0.isPlaying) return;
+    timer = setTimeout(() => {
+      timer = null;
+      const s1 = playerState();
+      if (!shouldResume || document.hidden || !s1) return;
+      if (s1.isPlaying && s1.currentTime > s0.currentTime) return; // 确实在推进，不干预
+      if (left <= 0) return;                                      // 多次补播无效（多半是自动播放策略拦截），停止空转
+      try { getPlayerEl().play(); } catch (_) {}
+      heal(left - 1);
+    }, PROBE_MS);
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopProbe();
+      const s = playerState();
+      shouldResume = !!(s && s.isPlaying); // 进后台那一刻在播 → 记住要续上
+      return;
+    }
+    heal(RETRY_MAX);
+  });
+
+  /* 前进/后退回到本页（bfcache）：音频多半已被系统停掉，按同一套探针处理 */
+  window.addEventListener("pageshow", (e) => { if (e.persisted) heal(RETRY_MAX); });
+
+  const playerEl = getPlayerEl();
+  if (playerEl) {
+    playerEl.addEventListener("nmpv3:play", () => { shouldResume = true; stopProbe(); });
+    playerEl.addEventListener("nmpv3:pause", () => { shouldResume = false; stopProbe(); });
+  }
+})();
+
 /* ---------------------- 音乐抽屉：选项卡 + 收起/展开 + 拖拽移动 ----------------------
    收起态（圆形按钮）与展开态（抽屉把手）均可拖拽，位置存 localStorage。
    展开方向按按钮当前所在位置自适应：按钮中心在左半屏 → 向右展开（左缘对齐），
