@@ -12,7 +12,7 @@
   const SITE_ORIGIN = "https://lotusor.github.io";
   const API = "https://api.github.com";
   const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-  const PASS_HASH = "ec6ae316659680fe0d285afa46d4cdefeb87314a7b4b896009e03acd6cddb41a"; // sha256('lotus-admin-2026')，见运维指南 §14 轮换方法
+  const PASS_HASH = "ec6ae316659680fe0d285afa46d4cdefeb87314a7b4b896009e03acd6cddb41a"; // 本地口令哈希；仅用于挡误入者，不是安全边界
   const AUTH_KEY = "lotusor-admin-auth";       // sessionStorage：本次口令会话
   const PAT_KEY = "lotusor-admin-pat";        // localStorage：记住的 PAT
   const AUTOSAVE_KEY = "lotusor-admin-autosave";

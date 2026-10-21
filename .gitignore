@@ -1,0 +1,21 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local tooling
+node_modules/
+_site/
+.cache/
+
+# Internal ops / hand-over material (never public)
+/HANDOVER*
+/HANDOFF*
+/PRE_LAUNCH*
+/prototype design*/
+*.bundle
